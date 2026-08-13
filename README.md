@@ -1,4 +1,12 @@
-# ATY_F-B_POS
+> ### **Copyright Notice & Proprietary License**
+> 
+> Copyright (c) **2026** [Nosh ]  
+> **All rights reserved.**
+> 
+> Unauthorized copying of this file, via any medium, is strictly prohibited.  
+> *Proprietary and confidential.*
+
+# NOSH POS
 
 A restaurant / retail Point of Sale (POS) system built with React, Vite, Tailwind CSS, and Supabase.
 
