@@ -47,18 +47,14 @@ npm install
 
 3. Configure Supabase:
 
-Update `src/createClients.js` with your Supabase project URL and public anon key.
+This project reads Supabase configuration from Vite environment variables. Set the following in a local `.env` file (or in your deployment environment):
 
-```js
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://your-project.supabase.co",
-  "your-public-anon-key"
-);
-
-export default supabase;
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
 ```
+
+The Supabase client in `src/createClients.js` requires these variables and will throw an error if they are missing. See `.env.example` for a template.
 
 4. Run the development server:
 
@@ -70,23 +66,11 @@ npm run dev
 
 ## Environment setup suggestion
 
-For a safer configuration, use environment variables and load them in `src/createClients.js`.
+Notes on environment files and security:
 
-Example:
-
-```js
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-```
-
-Then create a `.env` file:
-
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-public-anon-key
-```
+- Keep secrets out of source control. This repository ignores local env files (see `.gitignore`).
+- Use `.env.example` to share which variables are required without exposing secrets.
+- On CI/CD or deployment platforms, configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the environment variables section.
 
 ## Supabase schema overview
 
@@ -207,7 +191,6 @@ These scripts help extend the database to support discount amount storage, FIFO 
 
 ## Next improvements
 
-- Add environment variable support for Supabase config
 - Add authentication and role seeds for initial users
 - Add database migration automation or deploy scripts
 - Add tests for checkout, inventory, and history flows
