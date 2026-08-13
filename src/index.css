@@ -1,0 +1,419 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant glass (&:where(.glass, .glass *));
+
+body {
+    font-family: serif;
+    background-color: #f1f5f9;
+    color: #0f172a;
+}
+
+.dark body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+.glass body {
+    background:
+        radial-gradient(circle at 28% 20%, rgba(37, 99, 235, 0.55), rgba(37, 99, 235, 0) 38%),
+        radial-gradient(circle at 58% 76%, rgba(249, 115, 22, 0.58), rgba(249, 115, 22, 0) 44%),
+        radial-gradient(circle at 78% 32%, rgba(99, 102, 241, 0.4), rgba(99, 102, 241, 0) 46%),
+        linear-gradient(165deg, #030712 0%, #020617 55%, #000000 100%);
+    color: #e5e7eb;
+}
+
+/* Global dark theme overrides for existing light Tailwind utility usage */
+.dark .bg-white {
+    background-color: #1e293b !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-gray-100 {
+    background-color: #0f172a !important;
+}
+
+.dark .bg-gray-50 {
+    background-color: #111827 !important;
+}
+
+.dark .bg-gray-200,
+.dark .bg-gray-300 {
+    background-color: #334155 !important;
+}
+
+.dark .bg-slate-100 {
+    background-color: #273449 !important;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-blue-50,
+.dark .bg-emerald-50,
+.dark .bg-green-50,
+.dark .bg-rose-50,
+.dark .bg-amber-50,
+.dark .bg-yellow-50 {
+    background-color: #1e293b !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+    color: #e2e8f0 !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400 {
+    color: #cbd5e1 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+    color: #e2e8f0 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+    color: #cbd5e1 !important;
+}
+
+.dark .text-zinc-900,
+.dark .text-zinc-800,
+.dark .text-zinc-700,
+.dark .text-neutral-900,
+.dark .text-neutral-800,
+.dark .text-neutral-700,
+.dark .text-stone-900,
+.dark .text-stone-800,
+.dark .text-stone-700,
+.dark .text-black {
+    color: #e2e8f0 !important;
+}
+
+.dark .text-gray-300,
+.dark .text-slate-300 {
+    color: #dbeafe !important;
+}
+
+.dark .border-slate-300,
+.dark .border-slate-200,
+.dark .border-slate-100 {
+    border-color: #334155 !important;
+}
+
+.dark .border-gray-300,
+.dark .border-gray-200,
+.dark .border-gray-100 {
+    border-color: #334155 !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+}
+
+.dark select option {
+    background-color: #1e293b;
+    color: #e2e8f0;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+.dark table {
+    color: #e2e8f0;
+}
+
+.dark thead {
+    background-color: #273449 !important;
+}
+
+.dark th,
+.dark td {
+    border-color: #334155 !important;
+}
+
+.dark [class*="hover:bg-slate-50"]:hover,
+.dark [class*="hover:bg-slate-100"]:hover,
+.dark [class*="hover:bg-gray-100"]:hover,
+.dark [class*="hover:bg-gray-200"]:hover {
+    background-color: #334155 !important;
+}
+
+.dark [class*="bg-gray-300"] {
+    color: #e2e8f0 !important;
+}
+
+.dark .shadow,
+.dark .shadow-sm,
+.dark .shadow-lg,
+.dark .shadow-xl {
+    box-shadow: 0 10px 25px rgba(2, 6, 23, 0.45) !important;
+}
+
+/* Global glass mode overrides for existing utility usage */
+.glass .bg-white {
+    background-color: rgba(17, 24, 39, 0.48) !important;
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow:
+        0 20px 45px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 -1px 0 rgba(15, 23, 42, 0.45) !important;
+}
+
+.glass .bg-slate-900,
+.glass .bg-slate-800,
+.glass .bg-slate-700,
+.glass .bg-slate-600 {
+    background-color: rgba(15, 23, 42, 0.44) !important;
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow:
+        0 18px 42px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        inset 0 -1px 0 rgba(30, 41, 59, 0.28) !important;
+}
+
+.glass .bg-slate-50,
+.glass .bg-gray-100 {
+    background-color: rgba(240, 248, 255, 0.36) !important;
+}
+
+.glass .bg-gray-50 {
+    background-color: rgba(255, 255, 255, 0.32) !important;
+}
+
+.glass .bg-gray-200,
+.glass .bg-gray-300,
+.glass .bg-slate-100 {
+    background-color: rgba(226, 236, 248, 0.5) !important;
+}
+
+.glass .bg-indigo-50,
+.glass .bg-blue-50,
+.glass .bg-emerald-50,
+.glass .bg-green-50,
+.glass .bg-rose-50,
+.glass .bg-amber-50,
+.glass .bg-yellow-50 {
+    background-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.glass .text-slate-900,
+.glass .text-slate-800,
+.glass .text-slate-700,
+.glass .text-gray-900,
+.glass .text-gray-800,
+.glass .text-gray-700,
+.glass .text-zinc-900,
+.glass .text-zinc-800,
+.glass .text-zinc-700,
+.glass .text-neutral-900,
+.glass .text-neutral-800,
+.glass .text-neutral-700,
+.glass .text-stone-900,
+.glass .text-stone-800,
+.glass .text-stone-700,
+.glass .text-black {
+    color: #f8fafc !important;
+}
+
+.glass .text-slate-600,
+.glass .text-slate-500,
+.glass .text-slate-400,
+.glass .text-slate-300,
+.glass .text-slate-200,
+.glass .text-slate-100,
+.glass .text-gray-600,
+.glass .text-gray-500,
+.glass .text-gray-400,
+.glass .text-gray-300,
+.glass .text-gray-200,
+.glass .text-gray-100 {
+    color: #cbd5e1 !important;
+}
+
+.glass .border-slate-300,
+.glass .border-slate-200,
+.glass .border-slate-100,
+.glass .border-slate-700,
+.glass .border-slate-600,
+.glass .border-gray-300,
+.glass .border-gray-200,
+.glass .border-gray-100,
+.glass .border-gray-700,
+.glass .border-gray-600 {
+    border-color: rgba(255, 255, 255, 0.34) !important;
+}
+
+.glass input,
+.glass select,
+.glass textarea {
+    background-color: rgba(15, 23, 42, 0.56) !important;
+    color: #f8fafc !important;
+    border-color: rgba(255, 255, 255, 0.24) !important;
+    backdrop-filter: blur(14px) saturate(145%);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+.glass select option {
+    background-color: #0f172a;
+    color: #f8fafc;
+}
+
+.glass input::placeholder,
+.glass textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+.glass table {
+    color: #e5e7eb;
+}
+
+.glass thead {
+    background-color: rgba(15, 23, 42, 0.62) !important;
+}
+
+.glass th,
+.glass td {
+    border-color: rgba(148, 163, 184, 0.38) !important;
+}
+
+.glass [class*="hover:bg-slate-50"]:hover,
+.glass [class*="hover:bg-slate-100"]:hover,
+.glass [class*="hover:bg-gray-100"]:hover,
+.glass [class*="hover:bg-gray-200"]:hover {
+    background-color: rgba(99, 102, 241, 0.24) !important;
+}
+
+.glass .shadow,
+.glass .shadow-sm,
+.glass .shadow-lg,
+.glass .shadow-xl {
+    box-shadow:
+        0 16px 42px rgba(15, 23, 42, 0.19),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+}
+
+.glass .bg-indigo-900\/30,
+.glass .bg-indigo-900\/40,
+.glass .bg-indigo-900\/50,
+.glass .bg-emerald-900\/30,
+.glass .bg-red-900\/20,
+.glass .bg-red-900\/30,
+.glass .bg-red-900\/40,
+.glass .bg-blue-900\/30,
+.glass .bg-rose-900\/30,
+.glass .bg-green-900\/20,
+.glass .bg-green-900\/30 {
+    background-color: rgba(191, 219, 254, 0.28) !important;
+}
+
+/* Force glass treatment on components that only use dark:* utility tokens */
+.glass [class*="dark:bg-slate-900"],
+.glass [class*="dark:bg-slate-800"],
+.glass [class*="dark:bg-slate-700"],
+.glass [class*="dark:bg-slate-600"],
+.glass [class*="dark:bg-gray-900"],
+.glass [class*="dark:bg-gray-800"],
+.glass [class*="dark:bg-gray-700"],
+.glass [class*="dark:bg-gray-600"] {
+    background-color: rgba(255, 255, 255, 0.3) !important;
+    backdrop-filter: blur(20px) saturate(145%);
+    -webkit-backdrop-filter: blur(20px) saturate(145%);
+    border-color: rgba(255, 255, 255, 0.34) !important;
+    box-shadow:
+        0 12px 34px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.44) !important;
+}
+
+.glass [class*="dark:border-slate-700"],
+.glass [class*="dark:border-slate-600"],
+.glass [class*="dark:border-gray-700"],
+.glass [class*="dark:border-gray-600"] {
+    border-color: rgba(255, 255, 255, 0.34) !important;
+}
+
+.glass [class*="dark:text-slate-100"],
+.glass [class*="dark:text-slate-200"],
+.glass [class*="dark:text-slate-300"],
+.glass [class*="dark:text-slate-400"],
+.glass [class*="dark:text-gray-100"],
+.glass [class*="dark:text-gray-200"],
+.glass [class*="dark:text-gray-300"],
+.glass [class*="dark:text-gray-400"] {
+    color: #f8fafc !important;
+}
+
+.glass [class*="dark:hover:bg-slate-900"]:hover,
+.glass [class*="dark:hover:bg-slate-800"]:hover,
+.glass [class*="dark:hover:bg-slate-700"]:hover,
+.glass [class*="dark:hover:bg-slate-600"]:hover,
+.glass [class*="dark:hover:bg-gray-900"]:hover,
+.glass [class*="dark:hover:bg-gray-800"]:hover,
+.glass [class*="dark:hover:bg-gray-700"]:hover,
+.glass [class*="dark:hover:bg-gray-600"]:hover {
+    background-color: rgba(219, 234, 254, 0.34) !important;
+}
+
+/* Myanmar New Year greeting animation */
+@keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-2px) rotate(0.8deg); }
+    75% { transform: translateY(1px) rotate(-0.8deg); }
+}
+
+@keyframes glow-pulse {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.4)) brightness(1); }
+    33% { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)) brightness(1.1); }
+    66% { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5)) brightness(1.05); }
+}
+
+@keyframes color-shift {
+    0%   { background-position: 0% 0%; }
+    25%  { background-position: 100% 50%; }
+    50%  { background-position: 50% 0%; }
+    75%  { background-position: 0% 50%; }
+    100% { background-position: 0% 0%; }
+}
+
+.ny-greeting {
+    background-image: linear-gradient(
+        90deg,
+        #FFD700 0%,
+        #3B82F6 20%,
+        #A855F7 40%,
+        #34D399 60%,
+        #F59E0B 80%,
+        #FFD700 100%
+    ) !important;
+    background-size: 400% auto !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    animation: shimmer 3s linear infinite, float 2.5s ease-in-out infinite, glow-pulse 4s ease-in-out infinite, color-shift 8s ease-in-out infinite;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    letter-spacing: 0.5px;
+}
+
+.ny-greeting:hover {
+    animation-duration: 1s, 1.2s, 2s, 4s;
+    filter: drop-shadow(0 0 14px rgba(255, 215, 0, 0.7)) brightness(1.2);
+}

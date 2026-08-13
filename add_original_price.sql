@@ -1,0 +1,2 @@
+ALTER TABLE order_items
+ADD COLUMN IF NOT EXISTS original_price NUMERIC DEFAULT NULL;
