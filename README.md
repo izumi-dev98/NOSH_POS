@@ -22,7 +22,7 @@ The app supports checkout, inventory control, purchase orders, FIFO inventory tr
 - Expiry date alert system for expiring or expired purchase items
 - Reports for inventory value, sales, usage, expired stock, purchase returns, and supplier outstanding
 - Role-based navigation and access control
-- AI analytics/chat for quick business insights
+ 
 
 ## Requirements
 
