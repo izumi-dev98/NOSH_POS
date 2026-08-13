@@ -28,5 +28,6 @@ dist-ssr
 .env.local
 .env.*.local
 .claude
+.claude
 .claude.local
-.cloude.*.local
+.claude.*.local
