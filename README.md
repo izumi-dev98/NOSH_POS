@@ -1,6 +1,6 @@
 > ### **Copyright Notice & Proprietary License**
 > 
-> Copyright (c) **2026** [Nosh ]  
+> Copyright (c) **2026** Nosh   
 > **All rights reserved.**
 > 
 > Unauthorized copying of this file, via any medium, is strictly prohibited.  
