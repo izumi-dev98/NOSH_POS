@@ -36,7 +36,7 @@ The app supports checkout, inventory control, purchase orders, FIFO inventory tr
 
 ```bash
 git clone <your-repo-url>
-cd ATY_F-B_POS
+cd NOSH_POS
 ```
 
 2. Install dependencies:
