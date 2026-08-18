@@ -15,8 +15,7 @@ import supabase from "./createClients";
 import { fetchExpiringSoonPurchaseItems, runExpiryCheck } from "./utils/expiryService";
 import InventoryReport from "./pages/InventoryReport";
 import TotalSalesReport from "./pages/TotalSalesReport";
-import UsageReport from "./pages/UsageReport";
-import AddStockReport from "./pages/AddStockReport";
+import InternalUsageAddStockReport from "./pages/InternalUsageAddStockReport";
 import ProfitLossReport from "./pages/ProfitLossReport";
 import UserRight from "./pages/UserRight";
 
@@ -245,8 +244,7 @@ export default function App() {
             <Route path="/inventory" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['inventory']}><Inventory inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} /></PrivateRoute>} />
             <Route path="/reports/inventory" element={<PrivateRoute user={user} allowedFeatures={['report-inventory']}><InventoryReport /></PrivateRoute>} />
             <Route path="/reports/total-sales" element={<PrivateRoute user={user} allowedFeatures={['report-total-sales']}><TotalSalesReport /></PrivateRoute>} />
-            <Route path="/reports/usage" element={<PrivateRoute user={user} allowedFeatures={['report-usage']}><UsageReport /></PrivateRoute>} />
-            <Route path="/reports/add-stock" element={<PrivateRoute user={user} allowedFeatures={['report-add-stock']}><AddStockReport /></PrivateRoute>} />
+            <Route path="/reports/internal-usage-add-stock" element={<PrivateRoute user={user} allowedFeatures={['report-add-stock', 'report-usage']}><InternalUsageAddStockReport /></PrivateRoute>} />
             <Route path="/reports/sale-usage" element={<PrivateRoute user={user} allowedFeatures={['report-sale-usage']}><SaleUsageReport /></PrivateRoute>} />
             <Route path="/reports/top-selling-menu" element={<PrivateRoute user={user} allowedFeatures={['report-total-sales']}><TopSellingMenuReport /></PrivateRoute>} />
             <Route path="/reports/profit-loss" element={<PrivateRoute user={user} allowedFeatures={['report-profit-loss']}><ProfitLossReport /></PrivateRoute>} />

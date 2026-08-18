@@ -3,6 +3,7 @@ import supabase from "../createClients";
 import Swal from "sweetalert2";
 import { buildFifoList, deductFromFifo, restoreToFifo } from "../utils/fifoService";
 import { hasFeature } from "../utils/accessControl";
+import { upsertDailyMovement } from "../utils/dailyMovementService";
 
 export default function History({ setInventory }) {
   const [history, setHistory] = useState([]);
@@ -141,6 +142,12 @@ export default function History({ setInventory }) {
         .eq("id", Number(inventoryId));
       if (invUpdateErr) throw invUpdateErr;
 
+      await upsertDailyMovement({
+        inventoryId: Number(inventoryId),
+        movementDate: order.created_at ? new Date(order.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+        changes: { sale_usage_qty: Number(neededQty || 0) }
+      });
+
       if (inv) inv.qty = newQty;
 
       const fifoList = await buildFifoList(
@@ -180,6 +187,12 @@ export default function History({ setInventory }) {
         .update({ qty: newQty })
         .eq("id", Number(inventoryId));
       if (invUpdateErr) throw invUpdateErr;
+
+      await upsertDailyMovement({
+        inventoryId: Number(inventoryId),
+        movementDate: order.created_at ? new Date(order.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+        changes: { sale_usage_qty: -Number(neededQty || 0) }
+      });
 
       if (inv) inv.qty = newQty;
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { upsertDailyMovement } from "../utils/dailyMovementService";
 
 export default function Purchase({ setInventory }) {
   const [purchases, setPurchases] = useState([]);
@@ -457,18 +458,33 @@ export default function Purchase({ setInventory }) {
           const { data: existing } = await supabase.from("inventory").select("*").ilike("item_name", item.item_name.trim()).maybeSingle();
 
           if (existing) {
+            const nextQty = Number(existing.qty || 0) + Number(item.qty || 0);
             await supabase.from("inventory").update({
-              qty: existing.qty + item.qty,
+              qty: nextQty,
               price: item.unit_price,
               type: item.type || "-"
             }).eq("id", existing.id);
+
+            await upsertDailyMovement({
+              inventoryId: existing.id,
+              movementDate: purchase.date || new Date().toISOString().split("T")[0],
+              changes: { purchase_qty: Number(item.qty || 0) }
+            });
           } else {
-            await supabase.from("inventory").insert([{
+            const { data: inserted, error: insertError } = await supabase.from("inventory").insert([{
               item_name: item.item_name.trim(),
               qty: item.qty,
               type: item.type || "-",
               price: item.unit_price
-            }]);
+            }]).select().single();
+
+            if (insertError) throw insertError;
+
+            await upsertDailyMovement({
+              inventoryId: inserted.id,
+              movementDate: purchase.date || new Date().toISOString().split("T")[0],
+              changes: { purchase_qty: Number(item.qty || 0) }
+            });
           }
         }
 

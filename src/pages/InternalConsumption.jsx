@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { buildFifoList, deductFromFifo } from "../utils/fifoService";
+import { upsertDailyMovement } from "../utils/dailyMovementService";
 
 export default function InternalConsumption({ inventory, setInventory }) {
   const [records, setRecords] = useState([]);
@@ -13,6 +14,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
   const [usageStockCategories, setUsageStockCategories] = useState([]);
   const [formData, setFormData] = useState({
     notes: "",
+    date: new Date().toISOString().split('T')[0],
   });
   const [addFormData, setAddFormData] = useState({
     notes: "",
@@ -345,6 +347,12 @@ export default function InternalConsumption({ inventory, setInventory }) {
           .from("inventory")
           .update(updateData)
           .eq("id", item.id);
+
+        await upsertDailyMovement({
+          inventoryId: item.id,
+          movementDate: addFormData.date || new Date().toISOString().split("T")[0],
+          changes: { add_stock_qty: addQty }
+        });
       }
 
       // Refresh data
@@ -486,6 +494,12 @@ export default function InternalConsumption({ inventory, setInventory }) {
           .from("inventory")
           .update({ qty: newQty })
           .eq("id", item.id);
+
+        await upsertDailyMovement({
+          inventoryId: item.id,
+          movementDate: formData.date || new Date().toISOString().split("T")[0],
+          changes: { sale_usage_qty: usageQty }
+        });
 
         // Deduct from stock history (FIFO - date/time order)
         await deductFromStockHistory(item.id, item.item_name, item.type || item.unit, usageQty);
