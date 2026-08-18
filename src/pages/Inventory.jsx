@@ -57,6 +57,8 @@ export default function Inventory({
     category_id: "",
     price: ""
   });
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   // Opening inventory dates map
   const [openingDatesMap, setOpeningDatesMap] = useState({});
@@ -375,6 +377,31 @@ export default function Inventory({
     setShowModal(false);
     setIsEditing(false);
     setEditId(null);
+  };
+
+  const handleCreateCategory = async () => {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
+      return Swal.fire("Error", "Category name is required", "error");
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("inventory_categories")
+        .insert([{ name: trimmedName, description: "Created from inventory" }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await fetchCategories();
+      setFormData((prev) => ({ ...prev, category_id: String(data.id) }));
+      setNewCategoryName("");
+      setShowCategoryModal(false);
+      Swal.fire("Success", "Category created and connected!", "success");
+    } catch (err) {
+      Swal.fire("Error", err.message || "Failed to create category", "error");
+    }
   };
 
   const handlePrevPage = () => {
@@ -815,19 +842,30 @@ export default function Inventory({
                 </>
               )}
 
-              <select
-                name="category_id"
-                value={formData.category_id}
-                onChange={handleChange}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select Category</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  name="category_id"
+                  value={formData.category_id}
+                  onChange={handleChange}
+                  className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                {canEditInventoryCategory && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(true)}
+                    className="px-3 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+                  >
+                    + New
+                  </button>
+                )}
+              </div>
 
               <div className="flex justify-end gap-3 pt-2">
                 <button
@@ -845,6 +883,41 @@ export default function Inventory({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Create Inventory Category</h3>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Enter category name"
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setNewCategoryName("");
+                }}
+                className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCategory}
+                className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -34,10 +34,13 @@ export default function Purchase({ setInventory }) {
     manual_credit: ""
   });
   const [lineItems, setLineItems] = useState([
-    { id: 1, item_name: "", qty: "", buying_price : "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }
+    { id: 1, item_name: "", qty: "", buying_price : "", unit_price: "", total_price: "", type: "", inventory_id: "", category_id: "", foc_qty: "", expiry_date: "" }
   ]);
   const [nextItemId, setNextItemId] = useState(2);
   const [inventory, setInventoryLocal] = useState([]);
+  const [inventoryCategories, setInventoryCategories] = useState([]);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const user = JSON.parse(localStorage.getItem("user"));
   const canManage = user?.role === "superadmin" || user?.role === "admin";
@@ -51,10 +54,11 @@ export default function Purchase({ setInventory }) {
     setLoading(true);
     setError(null);
     try {
-      const [purchasesRes, suppliersRes, inventoryRes] = await Promise.all([
+      const [purchasesRes, suppliersRes, inventoryRes, inventoryCategoriesRes] = await Promise.all([
         supabase.from("purchases").select("*").order("id", { ascending: false }),
         supabase.from("suppliers").select("*").order("name", { ascending: true }),
-        supabase.from("inventory").select("*").order("item_name", { ascending: true })
+        supabase.from("inventory").select("*").order("item_name", { ascending: true }),
+        supabase.from("inventory_categories").select("*").order("name", { ascending: true })
       ]);
 
       if (purchasesRes.error) {
@@ -86,6 +90,10 @@ export default function Purchase({ setInventory }) {
         const invData = inventoryRes.data || [];
         setInventoryLocal(invData);
         if (setInventory) setInventory(invData);
+      }
+
+      if (!inventoryCategoriesRes.error) {
+        setInventoryCategories(inventoryCategoriesRes.data || []);
       }
 
       if (suppliersRes.error) {
@@ -165,7 +173,7 @@ export default function Purchase({ setInventory }) {
   const paginatedPurchases = filteredPurchases.slice(startIndex, startIndex + itemsPerPage);
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }]);
+    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", category_id: "", foc_qty: "", expiry_date: "" }]);
     setNextItemId(nextItemId + 1);
   };
 
@@ -188,29 +196,46 @@ export default function Purchase({ setInventory }) {
             updated.item_name = invItem.item_name;
             updated.type = invItem.type || "";
             updated.unit_price = invItem.price || "";
+            updated.category_id = String(invItem.category_id || "");
+            updated.buying_price = item.buying_price || "";
             updated.total_price = calculateLineTotal(updated.qty, updated.foc_qty, invItem.price);
           }
         }
 
-       if (field === "qty" || field === "buying_price") {
+        if (field === "category_id") {
+          if (!value) {
+            updated.inventory_id = "";
+          } else {
+            updated.inventory_id = "";
+          }
+        }
 
-    const qty =
-        field === "qty"
-            ? parseFloat(value) || 0
-            : parseFloat(item.qty) || 0;
+        if (["qty", "buying_price", "unit_price", "foc_qty"].includes(field)) {
+          const qtyValue = parseFloat(updated.qty) || 0;
+          const focQtyValue = parseFloat(updated.foc_qty) || 0;
+          const unitPriceValue = parseFloat(updated.unit_price) || 0;
+          const buyingPriceValue = parseFloat(updated.buying_price) || 0;
+          const billableQty = Math.max(qtyValue - focQtyValue, 0);
 
-    const buyingPrice =
-        field === "buying_price"
-            ? parseFloat(value) || 0
-            : parseFloat(item.buying_price) || 0;
+          if (field === "unit_price" && qtyValue > 0) {
+            const computedBuyingPrice = billableQty > 0 ? unitPriceValue * billableQty : unitPriceValue * qtyValue;
+            updated.buying_price = computedBuyingPrice.toFixed(2);
+            updated.total_price = (billableQty * unitPriceValue).toFixed(2);
+          } else if (field === "buying_price" && qtyValue > 0) {
+            const computedUnitPrice = buyingPriceValue / qtyValue;
+            updated.unit_price = computedUnitPrice.toFixed(2);
+            updated.total_price = (billableQty * computedUnitPrice).toFixed(2);
+          } else if ((field === "qty" || field === "foc_qty") && qtyValue > 0) {
+            if (buyingPriceValue > 0) {
+              const computedUnitPrice = buyingPriceValue / qtyValue;
+              updated.unit_price = computedUnitPrice.toFixed(2);
+              updated.total_price = (billableQty * computedUnitPrice).toFixed(2);
+            } else if (unitPriceValue > 0) {
+              updated.total_price = (billableQty * unitPriceValue).toFixed(2);
+            }
+          }
+        }
 
-    updated.unit_price =
-        qty > 0
-            ? (buyingPrice / qty).toFixed(0)
-            : "";
-
-    updated.total_price = buyingPrice;
-}
         // If item_name changes, clear inventory_id (manual entry)
         if (field === "item_name") {
           updated.inventory_id = "";
@@ -232,6 +257,30 @@ export default function Purchase({ setInventory }) {
 
 
 
+
+  const handleCreateCategory = async () => {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
+      return Swal.fire("Error", "Category name is required", "error");
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("inventory_categories")
+        .insert([{ name: trimmedName, description: "Created from purchase order" }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await fetchData();
+      setNewCategoryName("");
+      setShowCategoryModal(false);
+      Swal.fire("Success", "Inventory category created and refreshed!", "success");
+    } catch (err) {
+      Swal.fire("Error", err.message || "Failed to create inventory category", "error");
+    }
+  };
 
   const calculateSubTotal = () => {
     return lineItems.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
@@ -289,21 +338,27 @@ export default function Purchase({ setInventory }) {
       setLineItems(items.map((item, idx) => {
         // Find matching inventory item
         const invItem = inventory.find(i => i.item_name.toLowerCase() === item.item_name.toLowerCase());
+        const qtyValue = parseFloat(item.qty) || 0;
+        const unitPriceValue = parseFloat(item.unit_price) || 0;
+        const totalValue = parseFloat(item.total_price) || 0;
+        const derivedBuyingPrice = totalValue > 0 ? totalValue : (qtyValue * unitPriceValue);
         return {
           id: idx + 1,
           item_name: item.item_name || "",
           qty: item.qty || "",
           foc_qty: item.foc_qty || "",
+          buying_price: derivedBuyingPrice > 0 ? derivedBuyingPrice.toFixed(2) : "",
           unit_price: item.unit_price || "",
-          total_price: item.total_price || "",
+          total_price: item.total_price || (derivedBuyingPrice > 0 ? derivedBuyingPrice.toFixed(2) : ""),
           type: item.type || "",
           inventory_id: invItem ? String(invItem.id) : "",
+          category_id: invItem ? String(invItem.category_id || "") : "",
           expiry_date: item.expiry_date ? item.expiry_date.split("T")[0] : ""
         };
       }));
       setNextItemId(items.length + 1);
     } else {
-      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }]);
+      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", category_id: "", foc_qty: "", expiry_date: "" }]);
       setNextItemId(2);
     }
 
@@ -768,12 +823,80 @@ export default function Purchase({ setInventory }) {
         </div>
       )}
 
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-[60]">
+          <div className="bg-white w-full h-full shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setNewCategoryName("");
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                <span aria-hidden="true">←</span>
+                Back
+              </button>
+              <h3 className="text-xl font-bold text-slate-800">Create Inventory Category</h3>
+              <div className="w-[90px]" />
+            </div>
+
+            <div className="flex-1 p-3 overflow-y-auto">
+              <div className="space-y-3 pt-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Category Name</label>
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Enter inventory category name"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCategoryModal(false);
+                      setNewCategoryName("");
+                    }}
+                    className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateCategory}
+                    className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+                  >
+                    Save Category
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-y-auto py-8">
-          <div className="bg-white rounded-xl p-6 w-full max-w-7xl shadow-xl mx-4">
-            <h3 className="text-xl font-bold text-slate-800 mb-5">{isEditing ? "Edit Purchase" : "New Purchase"}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black/50 z-50">
+          <div className="bg-white w-full h-full overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h3 className="text-xl font-bold text-slate-800">{isEditing ? "Edit Purchase" : "New Purchase"}</h3>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <span className="text-2xl">×</span>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form onSubmit={handleSubmit} className=" mx-auto">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Invoice #</label>
@@ -793,69 +916,89 @@ export default function Purchase({ setInventory }) {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Items *</label>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="mb-2">
+                  <label className="block text-sm font-semibold text-slate-700">Items *</label>
+                </div>
+                <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                  <table className="text-sm">
                     <thead className="bg-slate-100">
                       <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700">Select from Inventory</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700">Item Name</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">Qty</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">FOC</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700 w-20">Unit</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Buying Price</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Unit Per Price</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-36">Expiry Date</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Total</th>
-                        {canManage && <th className="px-3 py-2 w-10"></th>}
+                        <th className="px-3 py-4 text-left font-semibold text-slate-700 w-52">Category</th>
+                        <th className="px-3 py-4 text-left font-semibold text-slate-700 w-52">Select from Inventory</th>
+                        <th className="px-3 py-4 text-left font-semibold text-slate-700 w-52">Item Name</th>
+                        <th className="px-3 py-4 text-center font-semibold text-slate-700 w-52">Qty</th>
+                        <th className="px-3 py-4 text-center font-semibold text-slate-700 w-52">FOC</th>
+                        <th className="px-3 py-4 text-left font-semibold text-slate-700 w-52">Unit</th>
+                        <th className="px-3 py-4 text-right font-semibold text-slate-700 w-52">Buying Price</th>
+                        <th className="px-3 py-4 text-right font-semibold text-slate-700 w-52">Unit Per Price</th>
+                        <th className="px-3 py-4 text-center font-semibold text-slate-700 w-52">Expiry Date</th>
+                        <th className="px-3 py-4 text-right font-semibold text-slate-700 w-52">Total</th>
+                        {canManage && <th className="px-3 py-4 w-16"></th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {lineItems.map((item) => (
-                        <tr key={item.id} className="border-t border-slate-100">
-                          <td className="px-3 py-2">
-                            <select value={item.inventory_id} onChange={(e) => updateLineItem(item.id, "inventory_id", e.target.value)}
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                              <option value="">-- New Item --</option>
-                              {inventory.map((inv) => (
-                                <option key={inv.id} value={inv.id}>{inv.item_name}</option>
+                      {lineItems.map((item) => {
+                        const filteredInventoryOptions = item.category_id
+                          ? inventory.filter((inv) => String(inv.category_id || "") === String(item.category_id))
+                          : inventory;
+
+                        return (
+                        <tr key={item.id} className="border-t border-slate-100 min-h-20">
+                          <td className="px- py-4">
+                            <select value={item.category_id || ""} onChange={(e) => updateLineItem(item.id, "category_id", e.target.value)}
+                              className="w-full px-3 py-3 border border-slate-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                              <option value="">All Categories</option>
+                              {inventoryCategories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="text" value={item.item_name} onChange={(e) => updateLineItem(item.id, "item_name", e.target.value)} placeholder="Enter or select item" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          <td className="px-3 py-4">
+                            <div className="flex gap-2 items-center">
+                              <select value={item.inventory_id} onChange={(e) => updateLineItem(item.id, "inventory_id", e.target.value)}
+                                className="flex-1 px-3 w-50 py-3 border border-slate-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="">-- New Item --</option>
+                                {filteredInventoryOptions.map((inv) => (
+                                  <option key={inv.id} value={inv.id}>{inv.item_name}</option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="number" value={item.qty} onChange={(e) => updateLineItem(item.id, "qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          <td className="px-3 py-4">
+                            <input type="text" value={item.item_name} onChange={(e) => updateLineItem(item.id, "item_name", e.target.value)} placeholder="Enter or select item" className="w-50 px-3 py-3 border border-slate-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="number" value={item.foc_qty} onChange={(e) => updateLineItem(item.id, "foc_qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-emerald-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-emerald-50" title="Free of Charge quantity" />
+                          <td className="px-3 py-4">
+                            <input type="number" value={item.qty} onChange={(e) => updateLineItem(item.id, "qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-3 py-3 border border-slate-300 rounded text-base text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="text" value={item.type} onChange={(e) => updateLineItem(item.id, "type", e.target.value)} placeholder="kg, pcs, box" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          <td className="px-3 py-4">
+                            <input type="number" value={item.foc_qty} onChange={(e) => updateLineItem(item.id, "foc_qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-3 py-3 border border-emerald-300 rounded text-base text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-emerald-50" title="Free of Charge quantity" />
                           </td>
-                           <td className="px-3 py-2">
-                            <input type="number" value={item.buying_price} onChange={(e) => updateLineItem(item.id, "buying_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          <td className="px-3 py-4">
+                            <input type="text" value={item.type} onChange={(e) => updateLineItem(item.id, "type", e.target.value)} placeholder="kg, pcs, box" className="w-full px-3 py-3 border border-slate-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                           <td className="px-3 py-4">
+                            <input type="number" value={item.buying_price} onChange={(e) => updateLineItem(item.id, "buying_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-3 py-3 border border-slate-300 rounded text-base text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="date" value={item.expiry_date || ""} onChange={(e) => updateLineItem(item.id, "expiry_date", e.target.value)} min={formData.date} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          <td className="px-3 py-4">
+                            <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-3 py-3 border border-slate-300 rounded text-base text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-700">
+                          <td className="px-3 py-4">
+                            <input type="date" value={item.expiry_date || ""} onChange={(e) => updateLineItem(item.id, "expiry_date", e.target.value)} min={formData.date} className="w-full px-3 py-3 border border-slate-300 rounded text-base text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-4 text-right font-medium text-slate-700">
                             <div className="text-sm">{formatMMK(item.total_price)}</div>
                             {item.foc_qty > 0 && (
                               <div className="text-xs text-emerald-600">FOC: {item.foc_qty}</div>
                             )}
                           </td>
                           {canManage && (
-                            <td className="px-3 py-2 text-center">
-                              <button type="button" onClick={() => removeLineItem(item.id)} className="text-rose-500 hover:text-rose-700 font-bold">X</button>
+                            <td className="px-3 py-4 text-center flex items-center justify-center h-full">
+                              <button type="button" onClick={() => removeLineItem(item.id)} className="text-rose-500 hover:text-rose-700 font-bold text-lg">×</button>
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -968,6 +1111,7 @@ export default function Purchase({ setInventory }) {
                 <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{isEditing ? "Update Purchase" : "Save Purchase"}</button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
