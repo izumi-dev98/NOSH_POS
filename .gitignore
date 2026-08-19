@@ -31,3 +31,5 @@ dist-ssr
 .claude
 .claude.local
 .claude.*.local
+.vercel
+.env*

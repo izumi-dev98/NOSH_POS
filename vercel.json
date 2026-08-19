@@ -1,8 +1,11 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/supabase/(.*)",
+      "dest": "/api/supabase/$1"
+    },
+    {
+      "handle": "filesystem"
     }
   ]
 }
