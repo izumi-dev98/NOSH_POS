@@ -1,11 +1,12 @@
 {
-  "routes": [
+  "rewrites": [
     {
-      "src": "/supabase/(.*)",
-      "dest": "/api/supabase/$1"
+      "source": "/supabase/:path*",
+      "destination": "https://gtvfahmaygedbdbzylxy.supabase.co/:path*"
     },
     {
-      "handle": "filesystem"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
