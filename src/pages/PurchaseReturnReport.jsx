@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function PurchaseReturnReport() {
   const [returns, setReturns] = useState([]);
@@ -46,25 +47,24 @@ export default function PurchaseReturnReport() {
 
       // Calculate remaining values for each return
       const remainingVals = {};
+      const purchaseItemIds = (itemsRes.data || []).map((item) => item.purchase_item_id).filter(Boolean);
+      const { data: purchaseItems } = purchaseItemIds.length > 0
+        ? await supabase
+          .from("purchase_items")
+          .select("id, qty, unit_price")
+          .in("id", purchaseItemIds)
+        : { data: [] };
+      const purchaseItemsById = (purchaseItems || []).reduce((map, item) => {
+        map[item.id] = item;
+        return map;
+      }, {});
+
       for (const ret of returnsRes.data || []) {
-        const returnItemsList = (itemsRes.data || []).filter(i => i.return_id === ret.id);
-        let remainingTotal = 0;
-
-        for (const item of returnItemsList) {
-          // Get current remaining qty from purchase_items
-          const { data: purchaseItem } = await supabase
-            .from("purchase_items")
-            .select("qty, unit_price")
-            .eq("id", item.purchase_item_id)
-            .single();
-
-          if (purchaseItem) {
-            // Remaining value = current qty * unit price
-            remainingTotal += (parseFloat(purchaseItem.qty) || 0) * (parseFloat(purchaseItem.unit_price) || 0);
-          }
-        }
-
-        remainingVals[ret.id] = remainingTotal;
+        const returnItemsList = (itemsRes.data || []).filter((item) => item.return_id === ret.id);
+        remainingVals[ret.id] = returnItemsList.reduce((total, item) => {
+          const purchaseItem = purchaseItemsById[item.purchase_item_id];
+          return total + (parseFloat(purchaseItem?.qty) || 0) * (parseFloat(purchaseItem?.unit_price) || 0);
+        }, 0);
       }
       setRemainingValues(remainingVals);
     } catch (err) {
@@ -223,10 +223,10 @@ export default function PurchaseReturnReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Purchase Return Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
           <button
             onClick={exportToExcel}

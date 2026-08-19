@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import supabase from "../createClients";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function TotalSalesReport() {
   const [orderItems, setOrderItems] = useState([]);
@@ -363,10 +364,10 @@ export default function TotalSalesReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Total Sales Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
           <button
             onClick={exportToExcel}

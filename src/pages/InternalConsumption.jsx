@@ -498,7 +498,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
         await upsertDailyMovement({
           inventoryId: item.id,
           movementDate: formData.date || new Date().toISOString().split("T")[0],
-          changes: { sale_usage_qty: usageQty }
+          changes: { internal_usage_qty: usageQty }
         });
 
         // Deduct from stock history (FIFO - date/time order)
@@ -552,6 +552,15 @@ export default function InternalConsumption({ inventory, setInventory }) {
               .from("inventory")
               .update({ qty: inv.qty + item.qty })
               .eq("id", item.inventory_id);
+
+            const record = records.find((entry) => entry.id === id);
+            await upsertDailyMovement({
+              inventoryId: item.inventory_id,
+              movementDate: record?.created_at
+                ? new Date(record.created_at).toISOString().split("T")[0]
+                : new Date().toISOString().split("T")[0],
+              changes: { internal_usage_qty: -Number(item.qty || 0) },
+            });
           }
         }
 

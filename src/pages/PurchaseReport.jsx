@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function PurchaseReport() {
   const [purchases, setPurchases] = useState([]);
@@ -61,14 +62,24 @@ export default function PurchaseReport() {
         const purchasesData = purchasesRes.data || [];
         setPurchases(purchasesData);
 
+        const purchaseIds = purchasesData.map((purchase) => purchase.id);
+        const { data: purchaseItems } = purchaseIds.length > 0
+          ? await supabase
+            .from("purchase_items")
+            .select("*")
+            .in("purchase_id", purchaseIds)
+          : { data: [] };
+        const itemsByPurchase = (purchaseItems || []).reduce((map, item) => {
+          if (!map[item.purchase_id]) map[item.purchase_id] = [];
+          map[item.purchase_id].push(item);
+          return map;
+        }, {});
+
         // Calculate total for each purchase and store items
         const values = {};
         const purchasesWithItems = [];
         for (const purchase of purchasesData) {
-          const { data: items } = await supabase
-            .from("purchase_items")
-            .select("*")
-            .eq("purchase_id", purchase.id);
+          const items = itemsByPurchase[purchase.id] || [];
 
           // Store items with purchase for later use
           purchasesWithItems.push({ ...purchase, _items: items || [] });
@@ -280,10 +291,10 @@ export default function PurchaseReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Purchase Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
           <button
             onClick={exportToExcel}

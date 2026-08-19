@@ -22,6 +22,7 @@ export default function SupplierOutstanding() {
   const [purchaseItemsMap, setPurchaseItemsMap] = useState({});
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash Down');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   // Preview modal state
@@ -197,6 +198,7 @@ export default function SupplierOutstanding() {
     // ensure we have items for small inline preview
     fetchPurchaseItems(purchase.id);
     setPaymentAmount('');
+    setPaymentMethod(purchase.payment_method || 'Cash Down');
     setShowPaymentModal(true);
   };
 
@@ -224,6 +226,7 @@ export default function SupplierOutstanding() {
       const remaining = total - newPaid;
       const updatePayload = {
         paid_amount: newPaid,
+        payment_method: paymentMethod,
         paid: remaining <= 0,
         status: remaining <= 0 ? 'received' : selectedPurchase.status || 'pending'
       };
@@ -261,6 +264,8 @@ export default function SupplierOutstanding() {
           "Invoice #": p.invoice_number,
           "Date": p.date,
           "Payment Term": p.credit_option || "-",
+          "Payment Method": p.payment_method || "-",
+          "Total Amount": p.total_amount,
           "Paid Status": p.invoiceStatus,
           "Remaining Amount": p.remaining_amount
         });
@@ -270,6 +275,8 @@ export default function SupplierOutstanding() {
         "Invoice #": "-",
         "Date": "-",
         "Payment Term": "-",
+        "Payment Method": "-",
+        "Total Amount": "-",
         "Paid Status": "-",
         "Amount": s.total_payable
       });
@@ -285,6 +292,60 @@ export default function SupplierOutstanding() {
     saveAs(fileData, `Supplier_Outstanding_${today}.xlsx`);
   };
 
+  const openPrintPreview = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const reportRows = filteredData.flatMap((supplier) => [
+      `<tr class="supplier-row"><td>${supplier.supplier_name}</td><td>${supplier.purchase_count}</td><td>${formatMMK(supplier.total_payable)}</td><td></td><td></td><td></td><td></td><td></td></tr>`,
+      ...supplier.purchases.map((purchase) => `
+        <tr>
+          <td></td>
+          <td>${purchase.invoice_number}</td>
+          <td>${purchase.date}</td>
+          <td>${purchase.payment_method || "-"}</td>
+          <td class="number">${formatMMK(purchase.total_amount)}</td>
+          <td>${purchase.invoiceStatus}</td>
+          <td class="number">${formatMMK(purchase.paid_amount)}</td>
+          <td class="number">${formatMMK(purchase.remaining_amount)}</td>
+        </tr>`)
+    ]).join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Supplier Outstanding Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
+            h1 { font-size: 20px; margin-bottom: 4px; }
+            p { color: #64748b; font-size: 12px; margin-top: 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+            th { background: #f1f5f9; }
+            .number { text-align: right; }
+            .supplier-row { background: #f8fafc; font-weight: bold; }
+            .print-button { background: #4f46e5; color: white; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; margin-bottom: 16px; }
+            @media print { .print-button { display: none; } }
+            @page { size: auto; margin: 10mm; }
+          </style>
+        </head>
+        <body>
+          <button class="print-button" onclick="window.print()">Print</button>
+          <h1>Supplier Outstanding Report</h1>
+          <p>Generated: ${new Date().toLocaleDateString("en-MM", { year: "numeric", month: "long", day: "numeric" })}</p>
+          <table>
+            <thead>
+              <tr><th>Supplier</th><th>Invoice #</th><th>Date</th><th>Payment Method</th><th>Total Amount</th><th>Status</th><th>Paid Amount</th><th>Remaining</th></tr>
+            </thead>
+            <tbody>${reportRows || '<tr><td colspan="8">No data found</td></tr>'}</tbody>
+          </table>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
@@ -292,20 +353,22 @@ export default function SupplierOutstanding() {
           <h1 className="text-2xl font-bold text-slate-800">Supplier Outstanding</h1>
           <p className="text-sm text-slate-500 mt-1">Credit purchase paid status report</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowPreviewModal(true)}
-            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
-          >
-            Preview & Print
-          </button>
-          <button
-            onClick={exportToExcel}
-            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"
-          >
-            Export Excel
-          </button>
-        </div>
+        {isReportOnlyView && (
+          <div className="flex gap-2">
+            <button
+              onClick={openPrintPreview}
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+            >
+              Print
+            </button>
+            <button
+              onClick={exportToExcel}
+              className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"
+            >
+              Export Excel
+            </button>
+          </div>
+        )}
       </div>
 
       {!isReportOnlyView && (
@@ -452,6 +515,7 @@ export default function SupplierOutstanding() {
                             ))}
                             {purchaseItemsMap[p.id].length > 3 && <span> +{purchaseItemsMap[p.id].length - 3} more</span>}
                             <div className="mt-1">Invoice Total: <span className="font-semibold">{formatMMK(p.total_amount)}</span></div>
+                            <div className="mt-1">Payment Method: <span className="font-semibold">{p.payment_method || "-"}</span></div>
                             <div className="mt-1">Remaining Pay: <span className="font-semibold">{formatMMK(p.remaining_amount)}</span></div>
                           </div>
                         )}
@@ -504,6 +568,9 @@ export default function SupplierOutstanding() {
                 <div><span className="text-slate-500">Tax:</span><span className="ml-2 text-blue-600">{selectedPurchase?.tax}%</span></div>
               )}
               <div><span className="text-slate-500">Payment:</span><span className="ml-2 font-medium">{selectedPurchase?.payment_type || "Cash Down"}</span></div>
+              {selectedPurchase?.payment_method && (
+                <div><span className="text-slate-500">Paid By:</span><span className="ml-2 font-medium">{selectedPurchase.payment_method}</span></div>
+              )}
               {selectedPurchase?.payment_type === "Credit" && selectedPurchase?.credit_option && (
                 <div><span className="text-slate-500">Credit:</span><span className="ml-2 font-medium">{selectedPurchase?.credit_option}</span></div>
               )}
@@ -569,6 +636,19 @@ export default function SupplierOutstanding() {
               </div>
             </div>
 
+            <div className="mb-4">
+              <label className="text-sm text-slate-600">Payment Type</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full mt-2 px-3 py-2 border border-slate-300 rounded-lg"
+              >
+                <option value="Cash Down">Cash Down</option>
+                <option value="Kpay">Kpay</option>
+                <option value="Credit">Credit</option>
+              </select>
+            </div>
+
             {/* small items preview if available */}
             {purchaseItemsMap[selectedPurchase.id] && purchaseItemsMap[selectedPurchase.id].length > 0 && (
               <div className="border border-slate-200 rounded-lg p-2 mb-4 text-sm">
@@ -628,11 +708,14 @@ export default function SupplierOutstanding() {
                             .badge-amber { background: #fef3c7; color: #d97706; }
                             .emerald { color: #059669; }
                             .amber { color: #d97706; }
+                            .print-button { background: #4f46e5; color: white; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; margin-bottom: 16px; }
+                            @media print { .print-button { display: none; } }
                             @page { size: auto; margin: 10mm; }
                             @media print { body { padding: 0; } }
                           </style>
                         </head>
                         <body>
+                          <button class="print-button" onclick="window.print()">Print</button>
                           <div class="brand">Nosh POS</div>
                           ${printContent.innerHTML}
                           <script>window.onload = function() { window.print(); }</script>
@@ -666,13 +749,14 @@ export default function SupplierOutstanding() {
                         <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Invoice #</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Payment Method</th>
                         <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
                         <th className="px-4 py-3 text-right font-semibold text-slate-700">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredData.length === 0 ? (
-                        <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                        <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
                       ) : (
                         filteredData.map((sup) => (
                           <Fragment key={sup.supplier_id}>
@@ -681,7 +765,7 @@ export default function SupplierOutstanding() {
                               <td className="px-4 py-3 text-slate-800">{sup.supplier_name}</td>
                               <td className="px-4 py-3 text-center text-slate-700">{sup.purchase_count}</td>
                               <td className="px-4 py-3 text-right text-amber-600">{formatMMK(sup.total_payable)}</td>
-                              <td colSpan="4"></td>
+                              <td colSpan="5"></td>
                             </tr>
                             {/* Purchase rows */}
                             {sup.purchases.map((p) => (
@@ -691,6 +775,7 @@ export default function SupplierOutstanding() {
                                 <td className="px-4 py-3 text-right text-slate-600"></td>
                                 <td className="px-4 py-3 text-slate-700">{p.invoice_number}</td>
                                 <td className="px-4 py-3 text-slate-600">{p.date}</td>
+                                <td className="px-4 py-3 text-center text-slate-600">{p.payment_method || "-"}</td>
                                 <td className="px-4 py-3 text-center">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                     p.invoicePaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
@@ -708,7 +793,7 @@ export default function SupplierOutstanding() {
                       <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
                         <td colSpan="2" className="px-4 py-3 text-right text-slate-700">{totalLabel}</td>
                         <td className="px-4 py-3 text-right text-indigo-600">{formatMMK(totalOutstanding)}</td>
-                        <td colSpan="4"></td>
+                        <td colSpan="5"></td>
                       </tr>
                     </tbody>
                   </table>

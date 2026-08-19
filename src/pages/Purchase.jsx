@@ -68,13 +68,24 @@ export default function Purchase({ setInventory }) {
         const purchasesData = purchasesRes.data || [];
         setPurchases(purchasesData);
 
+        const purchaseIds = purchasesData.map((purchase) => purchase.id);
+        const { data: purchaseItems } = purchaseIds.length > 0
+          ? await supabase
+            .from("purchase_items")
+            .select("purchase_id, qty, foc_qty, unit_price")
+            .in("purchase_id", purchaseIds)
+          : { data: [] };
+
+        const itemsByPurchase = (purchaseItems || []).reduce((map, item) => {
+          if (!map[item.purchase_id]) map[item.purchase_id] = [];
+          map[item.purchase_id].push(item);
+          return map;
+        }, {});
+
         // Calculate current value for each purchase ((qty - foc_qty) * unit_price)
         const values = {};
         for (const purchase of purchasesData) {
-          const { data: items } = await supabase
-            .from("purchase_items")
-            .select("qty, foc_qty, unit_price")
-            .eq("purchase_id", purchase.id);
+          const items = itemsByPurchase[purchase.id] || [];
 
           values[purchase.id] = (items || []).reduce((sum, item) => {
             const qty = parseFloat(item.qty) || 0;
@@ -617,12 +628,17 @@ export default function Purchase({ setInventory }) {
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{statusText}</span>;
   };
 
+  const isImmediatePayment = (paymentType) => {
+    const normalizedPaymentType = String(paymentType || "").toLowerCase();
+    return normalizedPaymentType === "cash down" || normalizedPaymentType === "kpay";
+  };
+
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Purchase Order</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage purchase orders</p>
+          <h1 className="text-2xl font-bold text-slate-800">Purchase</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage purchases</p>
         </div>
         {canManage && (
           <button onClick={openAddModal} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
@@ -681,8 +697,9 @@ export default function Purchase({ setInventory }) {
               <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchases found</td></tr>
             ) : (
               paginatedPurchases.map((purchase) => {
-                const isStayToPay = purchase.status === "Received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
-                const isCompleted = purchase.status === "Received" && (purchase.paid || String(purchase.payment_type || "").toLowerCase() === "cash down");
+                const isReceived = String(purchase.status || "").toLowerCase() === "received";
+                const isStayToPay = isReceived && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
+                const isCompleted = isReceived && (purchase.paid || isImmediatePayment(purchase.payment_type));
                 return (
                 <tr key={purchase.id} className={`border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 ${isStayToPay ? "bg-red-50 dark:bg-red-900/20" : ""} ${isCompleted ? "bg-green-50 dark:bg-green-900/20" : ""}`}>
                   <td className="px-4 py-3 font-semibold text-slate-800">
@@ -703,7 +720,7 @@ export default function Purchase({ setInventory }) {
                           </>
                         )}
                         {purchase.status === "received" && (
-                          (purchase.paid || String(purchase.payment_type || "").toLowerCase() === "cash down") ? (
+                          (purchase.paid || isImmediatePayment(purchase.payment_type)) ? (
                             <span className="text-xs text-emerald-600 font-medium">Completed</span>
                           ) : (
                             <span className="text-xs text-blue-600 font-medium">Stay to Pay</span>
@@ -1044,6 +1061,7 @@ export default function Purchase({ setInventory }) {
                       className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="Cash Down">Cash Down</option>
+                      <option value="Kpay">Kpay</option>
                       <option value="Credit">Credit</option>
                     </select>
                   </div>

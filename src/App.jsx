@@ -252,12 +252,12 @@ export default function App() {
             <Route path="/user-right" element={<PrivateRoute user={user} allowedRoles={['superadmin']} allowedFeatures={['user-right']}><UserRight /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user} allowedFeatures={['internal-consumption']}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['discount-type']}><DiscountType /></PrivateRoute>} />
-            <Route path="/purchase" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['purchase-order']}><Purchase setInventory={setInventory} /></PrivateRoute>} />
+            <Route path="/purchase-order" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['purchase-order']}><Purchase setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/supplier" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier']}><Supplier /></PrivateRoute>} />
             <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['purchase-return']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase']}><PurchaseReport /></PrivateRoute>} />
             <Route path="/purchase-return-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase-return']}><PurchaseReturnReport /></PrivateRoute>} />
-            <Route path="/reports/expired" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-expired']}><ExpiredReport /></PrivateRoute>} />
+            <Route path="/reports/expire" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-expired']}><ExpiredReport /></PrivateRoute>} />
             <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
             <Route path="/reports/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
 

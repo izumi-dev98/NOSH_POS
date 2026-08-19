@@ -55,14 +55,18 @@ export default function Inventory({
     qty: "",
     type: "",
     category_id: "",
-    price: ""
+    price: "",
+    expiry_date: ""
   });
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [editPurchaseInvoices, setEditPurchaseInvoices] = useState([]);
+  const [selectedPurchaseItemId, setSelectedPurchaseItemId] = useState("");
 
   // Opening inventory dates map
   const [openingDatesMap, setOpeningDatesMap] = useState({});
   const [dailyMovementsMap, setDailyMovementsMap] = useState({});
+  const [movementTotalsMap, setMovementTotalsMap] = useState({});
   const [itemSearchInModal, setItemSearchInModal] = useState("");
 
   // Get category name by ID
@@ -149,14 +153,21 @@ export default function Inventory({
       if (movementsError) throw movementsError;
 
       const movementsMap = {};
+      const totalsMap = {};
       movements?.forEach((movement) => {
         const current = movementsMap[movement.inventory_id];
         if (!current || new Date(movement.movement_date) >= new Date(current.movement_date)) {
           movementsMap[movement.inventory_id] = movement;
         }
+
+        const totals = totalsMap[movement.inventory_id] || { sale_usage_qty: 0, internal_usage_qty: 0 };
+        totals.sale_usage_qty += Number(movement.sale_usage_qty || 0);
+        totals.internal_usage_qty += Number(movement.internal_usage_qty || 0);
+        totalsMap[movement.inventory_id] = totals;
       });
 
       setDailyMovementsMap(movementsMap);
+      setMovementTotalsMap(totalsMap);
     } catch (err) {
       console.error("Error fetching opening dates and movements:", err);
     }
@@ -341,16 +352,60 @@ export default function Inventory({
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const openEditModal = (item) => {
+    setEditPurchaseInvoices(["Loading..."]);
+    setSelectedPurchaseItemId("");
     setFormData({
       item_name: item.item_name,
       qty: item.qty,
       type: item.type,
       category_id: item.category_id || "",
-      price: item.price || ""
+      price: item.price || "",
+      expiry_date: item.expiry_date || ""
     });
     setEditId(item.id);
     setIsEditing(true);
     setShowModal(true);
+
+    supabase
+      .from("purchase_items")
+      .select("id, purchase_id, expiry_date")
+      .ilike("item_name", item.item_name)
+      .order("id", { ascending: false })
+      .then(async ({ data: purchaseItems, error }) => {
+        const purchaseIds = (purchaseItems || []).map((itemRecord) => itemRecord.purchase_id).filter(Boolean);
+        if (error || purchaseIds.length === 0) {
+          setEditPurchaseInvoices([]);
+          return;
+        }
+
+        const { data: purchases } = await supabase
+          .from("purchases")
+          .select("id, invoice_number")
+          .in("id", purchaseIds)
+          .order("created_at", { ascending: false });
+
+        const invoiceOptions = (purchases || []).map((purchase) => {
+          const purchaseItem = purchaseItems.find((itemRecord) => itemRecord.purchase_id === purchase.id);
+          return {
+            id: purchaseItem?.id,
+            invoiceNumber: purchase.invoice_number,
+            expiryDate: purchaseItem?.expiry_date || ""
+          };
+        }).filter((option) => option.id && option.invoiceNumber);
+
+        setEditPurchaseInvoices(invoiceOptions);
+        if (invoiceOptions.length > 0) {
+          setSelectedPurchaseItemId(String(invoiceOptions[0].id));
+          setFormData((previous) => ({ ...previous, expiry_date: invoiceOptions[0].expiryDate }));
+        }
+      });
+  };
+
+  const handlePurchaseInvoiceChange = (e) => {
+    const selectedId = e.target.value;
+    const selectedInvoice = editPurchaseInvoices.find((invoice) => String(invoice.id) === selectedId);
+    setSelectedPurchaseItemId(selectedId);
+    setFormData((previous) => ({ ...previous, expiry_date: selectedInvoice?.expiryDate || "" }));
   };
 
   const handleSubmit = async (e) => {
@@ -360,7 +415,8 @@ export default function Inventory({
       qty: Number(formData.qty),
       type: formData.type,
       category_id: formData.category_id || null,
-      price: formData.price ? Number(formData.price) : null
+      price: formData.price ? Number(formData.price) : null,
+      expiry_date: formData.expiry_date || null
     };
     const adminCategoryPayload = {
       category_id: formData.category_id || null
@@ -369,6 +425,13 @@ export default function Inventory({
     if (isEditing) {
       const payload = canEditInventory ? fullPayload : adminCategoryPayload;
       await updateInventoryItem(editId, payload);
+
+      if (canEditInventory && selectedPurchaseItemId) {
+        await supabase
+          .from("purchase_items")
+          .update({ expiry_date: formData.expiry_date || null })
+          .eq("id", selectedPurchaseItemId);
+      }
     }
 
     // Refresh latest prices after adding/updating
@@ -532,6 +595,113 @@ export default function Inventory({
       }
     }
 
+    // Add completed internal usage records
+    const { data: usageRecords } = await supabase
+      .from("internal_consumption")
+      .select("id, created_at")
+      .eq("status", "completed")
+      .order("created_at", { ascending: true });
+
+    const usageIds = usageRecords?.map((record) => record.id) || [];
+    if (usageIds.length > 0) {
+      const { data: usageItems } = await supabase
+        .from("internal_consumption_items")
+        .select("id, qty, consumption_id, inventory_id")
+        .in("consumption_id", usageIds)
+        .eq("inventory_id", targetId);
+
+      const usageDateMap = {};
+      usageRecords.forEach((record) => {
+        usageDateMap[record.id] = record.created_at;
+      });
+
+      (usageItems || []).forEach((usageItem) => {
+        const createdAt = usageDateMap[usageItem.consumption_id];
+        history.push({
+          id: `usage-${usageItem.id}`,
+          qty: parseFloat(usageItem.qty) || 0,
+          foc_qty: 0,
+          unit_price: 0,
+          purchase_date: createdAt ? new Date(createdAt).toISOString().split("T")[0] : "-",
+          fifo_date: createdAt || null,
+          invoice_number: `Usage #${usageItem.consumption_id}`,
+          supplier_id: null,
+          source_type: "Internal Usage",
+          status: "completed",
+        });
+      });
+    }
+
+    // Add completed sale usage by expanding menu ingredients for each order item
+    const { data: completedOrders } = await supabase
+      .from("orders")
+      .select("id, created_at")
+      .eq("status", "completed")
+      .order("created_at", { ascending: true });
+
+    const completedOrderIds = completedOrders?.map((order) => order.id) || [];
+    if (completedOrderIds.length > 0) {
+      const [{ data: orderItems }, { data: menuIngredients }, { data: menuSetItems }] = await Promise.all([
+        supabase
+          .from("order_items")
+          .select("id, order_id, menu_id, menu_set_id, qty")
+          .in("order_id", completedOrderIds),
+        supabase
+          .from("menu_ingredients")
+          .select("menu_id, inventory_id, qty")
+          .eq("inventory_id", targetId),
+        supabase
+          .from("menu_set_items")
+          .select("set_id, menu_id"),
+      ]);
+
+      const ingredientsByMenuId = {};
+      (menuIngredients || []).forEach((ingredient) => {
+        if (!ingredientsByMenuId[ingredient.menu_id]) ingredientsByMenuId[ingredient.menu_id] = [];
+        ingredientsByMenuId[ingredient.menu_id].push(ingredient);
+      });
+
+      const menuIdsBySetId = {};
+      (menuSetItems || []).forEach((setItem) => {
+        if (!menuIdsBySetId[setItem.set_id]) menuIdsBySetId[setItem.set_id] = [];
+        menuIdsBySetId[setItem.set_id].push(setItem.menu_id);
+      });
+
+      const orderDateMap = {};
+      (completedOrders || []).forEach((order) => {
+        orderDateMap[order.id] = order.created_at;
+      });
+
+      (orderItems || []).forEach((orderItem) => {
+        const menuIds = orderItem.menu_set_id
+          ? (menuIdsBySetId[orderItem.menu_set_id] || [])
+          : [orderItem.menu_id];
+        const usedQty = menuIds.reduce(
+          (sum, menuId) => sum + (ingredientsByMenuId[menuId] || []).reduce(
+            (ingredientSum, ingredient) => ingredientSum + (parseFloat(ingredient.qty) || 0),
+            0,
+          ),
+          0,
+        ) * (parseFloat(orderItem.qty) || 0);
+
+        if (usedQty <= 0) return;
+
+        const createdAt = orderDateMap[orderItem.order_id];
+        history.push({
+          id: `sale-${orderItem.id}`,
+          qty: usedQty,
+          foc_qty: 0,
+          unit_price: 0,
+          purchase_date: createdAt ? new Date(createdAt).toISOString().split("T")[0] : "-",
+          fifo_date: createdAt || null,
+          invoice_number: `Order #${orderItem.order_id}`,
+          supplier_id: null,
+          source_type: "Sale Usage",
+          status: "completed",
+        });
+      });
+    }
+
     // Sort by date (oldest first)
     history.sort((a, b) => {
       const tsA = getFifoTimestamp(a.fifo_date);
@@ -644,7 +814,6 @@ export default function Inventory({
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Opening Qty</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Purchase</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Add Stock</th>
-                <th className="px-4 py-3 text-center font-semibold text-slate-700">Adjust</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
@@ -656,7 +825,7 @@ export default function Inventory({
             <tbody>
               {paginatedInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="14" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="13" className="px-4 py-8 text-center text-slate-500">
                     No inventory found
                   </td>
                 </tr>
@@ -670,6 +839,10 @@ export default function Inventory({
                     sale_usage_qty: 0,
                     internal_usage_qty: 0,
                     closing_qty: 0,
+                  };
+                  const movementTotals = movementTotalsMap[item.id] || {
+                    sale_usage_qty: 0,
+                    internal_usage_qty: 0,
                   };
 
                   return (
@@ -707,32 +880,29 @@ export default function Inventory({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center text-xs">
-                        <span className={`font-medium ${Number(movement.adjust_qty || 0) !== 0 ? (Number(movement.adjust_qty) > 0 ? "text-blue-600" : "text-orange-600") : "text-slate-400"}`}>
-                          {Number(movement.adjust_qty || 0) !== 0 ? `${Number(movement.adjust_qty) > 0 ? "+" : ""}${Number(movement.adjust_qty)}` : "0"}
+                        <span className={`font-medium ${Number(movementTotals.sale_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
+                          {Number(movementTotals.sale_usage_qty || 0) > 0 ? `-${Number(movementTotals.sale_usage_qty)}` : "0"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center text-xs">
-                        <span className={`font-medium ${Number(movement.sale_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
-                          {Number(movement.sale_usage_qty || 0) > 0 ? `-${Number(movement.sale_usage_qty)}` : "0"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-xs">
-                        <span className={`font-medium ${Number(movement.internal_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
-                          {Number(movement.internal_usage_qty || 0) > 0 ? `-${Number(movement.internal_usage_qty)}` : "0"}
+                        <span className={`font-medium ${Number(movementTotals.internal_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
+                          {Number(movementTotals.internal_usage_qty || 0) > 0 ? `-${Number(movementTotals.internal_usage_qty)}` : "0"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-xs">
-                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded font-semibold">{Number(movement.closing_qty || 0)}</span>
+                        <span className={`px-2 py-1 rounded font-semibold ${Number(item.qty || 0) > 2 ? " text-green-600" : " text-red-700"}`}>
+                          {Number(item.qty || 0)}
+                        </span>
                       </td>
                       <td className="px-4 py-3 font-medium text-xs">
                         {openingDatesMap[item.id] ? (
-                          <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">{openingDatesMap[item.id]}</span>
+                          <span className="px-2 py-1  text-green-600 rounded-full">{openingDatesMap[item.id]}</span>
                         ) : (
                           <span className="text-slate-400">Not Set</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full font-medium">
+                      <td className="px-2 py-3 text-xs">
+                        <span className="px-2 py-1  text-violet-700 rounded-full font-medium">
                           {getCategoryName(item.category_id)}
                         </span>
                       </td>
@@ -741,7 +911,7 @@ export default function Inventory({
                           {(canEditInventory || canEditInventoryCategory) && (
                             <button
                               onClick={() => openEditModal(item)}
-                              className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                              className="px-2 py-1 text-xs bg-indigo-600 text-gray-300 rounded hover:bg-indigo-700"
                             >
                               Edit
                             </button>
@@ -804,50 +974,98 @@ export default function Inventory({
             <form onSubmit={handleSubmit} className="space-y-4">
               {canEditInventory && (
                 <>
-                  <input
-                    name="item_name"
-                    placeholder="Item name"
-                    value={formData.item_name}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                  <input
-                    type="number"
-                    name="qty"
-                    placeholder="Quantity"
-                    value={formData.qty}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                  <input
-                    name="type"
-                    placeholder="Unit"
-                    value={formData.type}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                  <input
-                    type="number"
-                    name="price"
-                    placeholder="Price"
-                    value={formData.price}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    step="0.01"
-                    min="0"
-                  />
+                  <div>
+                    <label htmlFor="inventory-item-name" className="block text-sm font-medium text-slate-700 mb-1">Item Name</label>
+                    <input
+                      id="inventory-item-name"
+                      name="item_name"
+                      value={formData.item_name}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="inventory-quantity" className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
+                    <input
+                      id="inventory-quantity"
+                      type="number"
+                      name="qty"
+                      value={formData.qty}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="inventory-unit" className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
+                    <input
+                      id="inventory-unit"
+                      name="type"
+                      value={formData.type}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="inventory-price" className="block text-sm font-medium text-slate-700 mb-1">Price</label>
+                    <input
+                      id="inventory-price"
+                      type="number"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="inventory-expiry-date" className="block text-sm font-medium text-slate-700 mb-1">
+                        Expiry Date
+                      </label>
+                      <input
+                        id="inventory-expiry-date"
+                        type="date"
+                        name="expiry_date"
+                        value={formData.expiry_date}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="inventory-purchase-invoice" className="block text-sm font-medium text-slate-700 mb-1">
+                        Purchase Invoice #
+                      </label>
+                      <select
+                        id="inventory-purchase-invoice"
+                        value={selectedPurchaseItemId}
+                        onChange={handlePurchaseInvoiceChange}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-600"
+                      >
+                        {editPurchaseInvoices.length === 0 ? (
+                          <option value="">No purchase invoice found</option>
+                        ) : (
+                          editPurchaseInvoices.map((invoice) => (
+                            <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  </div>
                 </>
               )}
 
-              <div className="flex gap-2">
+              <div>
+                <label htmlFor="inventory-category" className="block text-sm font-medium text-slate-700 mb-1">Category</label>
                 <select
+                  id="inventory-category"
                   name="category_id"
                   value={formData.category_id}
                   onChange={handleChange}
-                  className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select Category</option>
                   {categories.map((cat) => (
@@ -856,15 +1074,6 @@ export default function Inventory({
                     </option>
                   ))}
                 </select>
-                {canEditInventoryCategory && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCategoryModal(true)}
-                    className="px-3 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
-                  >
-                    + New
-                  </button>
-                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
@@ -925,7 +1134,7 @@ export default function Inventory({
       {/* Item Detail Modal - Purchase History */}
       {showDetailModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-5xl shadow-xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="bg-white p-6 w-full h-full overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Item Details</h3>
@@ -933,7 +1142,7 @@ export default function Inventory({
                 {selectedItem && (
                   <div className="mt-2 flex gap-6 text-sm">
                     <div>
-                      <span className="text-slate-500">Current Stock:</span>
+                      <span className="text-slate-500">Closing Stock:</span>
                       <span className="ml-2 font-semibold text-slate-800">{selectedItem.qty} {selectedItem.type}</span>
                     </div>
                     <div>
@@ -973,6 +1182,7 @@ export default function Inventory({
                       const focQty = parseFloat(item.foc_qty) || 0;
                       const billableQty = qty - focQty;
                       const isZero = qty === 0;
+                      const isUsage = item.source_type === "Sale Usage" || item.source_type === "Internal Usage";
                       const rowTotal = (billableQty * (parseFloat(item.unit_price) || 0));
                       return (
                         <tr
@@ -985,7 +1195,11 @@ export default function Inventory({
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               item.source_type === "Add Stock"
                                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400"
+                                : item.source_type === "Sale Usage"
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+                                  : item.source_type === "Internal Usage"
+                                    ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                    : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400"
                             }`}>
                               {item.source_type || "Purchase"}
                             </span>
@@ -995,22 +1209,22 @@ export default function Inventory({
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{getSupplierName(item.supplier_id)}</td>
                           <td className="px-4 py-2 text-center">
                             <div className="flex flex-col items-center text-xs">
-                              <span className={`font-medium ${item.qty === 0 ? "text-red-600" : "text-slate-600 dark:text-slate-400"}`}>
-                                {item.qty}
+                              <span className={`font-medium ${isUsage ? "text-red-600" : item.qty === 0 ? "text-red-600" : "text-slate-600 dark:text-slate-400"}`}>
+                                {isUsage ? `-${item.qty}` : item.qty}
                               </span>
                               <span className="text-slate-500 text-[10px]">
-                                (Orig: {item.original_qty} / -{item.returned_qty || 0})
+                                {isUsage ? "Used" : `(Orig: ${item.original_qty} / -${item.returned_qty || 0})`}
                               </span>
                             </div>
                           </td>
                           <td className="px-4 py-2 text-center">
-                            {focQty > 0 ? (
+                            {!isUsage && focQty > 0 ? (
                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{focQty}</span>
                             ) : (
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{formatMMK(item.unit_price)}</td>
+                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{isUsage ? "-" : formatMMK(item.unit_price)}</td>
                           <td className="px-4 py-2 text-center">
                             {item.expiry_date ? (
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -1024,7 +1238,7 @@ export default function Inventory({
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{formatMMK(rowTotal)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{isUsage ? "-" : formatMMK(rowTotal)}</td>
                         </tr>
                       );
                     })
@@ -1205,7 +1419,7 @@ export default function Inventory({
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Opening Qty</th>
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Purchase</th>
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Add Stock</th>
-                    <th className="px-4 py-3 text-center font-semibold text-slate-700">Adjust</th>
+                   
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
                     <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
@@ -1236,15 +1450,7 @@ export default function Inventory({
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {movement.adjust_qty !== 0 ? (
-                            <span className={movement.adjust_qty > 0 ? "text-blue-600 font-medium" : "text-orange-600 font-medium"}>
-                              {movement.adjust_qty > 0 ? "+" : ""}{movement.adjust_qty}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
+                     
                         <td className="px-4 py-3 text-center">
                           {movement.sale_usage_qty > 0 ? (
                             <span className="text-red-600 font-medium">-{movement.sale_usage_qty}</span>
@@ -1264,7 +1470,7 @@ export default function Inventory({
                             type="number"
                             value={movement.closing_qty}
                             onChange={(e) => updateClosingQty(movement.id, e.target.value)}
-                            className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-20 px-2 py-1 border  rounded text-sm text-center focus:outline-none focus:ring-2 "
                             min="0"
                             step="0.01"
                           />

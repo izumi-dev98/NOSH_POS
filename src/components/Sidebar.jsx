@@ -87,8 +87,8 @@ export default function Sidebar({ isOpen }) {
             {purchaseOpen && (
               <div className="mt-1 ml-3 space-y-1 border-l-2 border-indigo-200 pl-3 dark:border-indigo-800 glass:border-white/55">
                 {canAccess("purchase-order") && (
-                  <NavLink to="/purchase" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
-                    Purchase Order
+                  <NavLink to="/purchase-order" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
+                    Purchase
                   </NavLink>
                 )}
                 {canAccess("supplier") && (
@@ -168,8 +168,8 @@ export default function Sidebar({ isOpen }) {
                   </NavLink>
                 )}
                 {canAccess("report-expired") && (
-                  <NavLink to="/reports/expired" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
-                    Expired Report
+                  <NavLink to="/reports/expire" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
+                    Expire Report
                   </NavLink>
                 )}
               </div>

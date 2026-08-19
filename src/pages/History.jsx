@@ -729,6 +729,14 @@ export default function History({ setInventory }) {
           .eq("id", Number(inventoryId));
         if (invUpdateErr) throw invUpdateErr;
 
+        await upsertDailyMovement({
+          inventoryId: Number(inventoryId),
+          movementDate: order.created_at
+            ? new Date(order.created_at).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+          changes: { sale_usage_qty: Number(neededQty || 0) },
+        });
+
         if (inv) inv.qty = newQty;
 
         const remaining = await deductFromStockHistory(

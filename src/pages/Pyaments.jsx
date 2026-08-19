@@ -322,24 +322,30 @@ export default function Pyaments({ inventory, setInventory, user }) {
         const discAmt = itemDiscounts[key] != null ? Number(itemDiscounts[key]) : 0;
         const effectivePrice = item.price - discAmt;
         const origPrice = item.price;
+        let itemErr;
         if (item.isSet) {
-          await supabase.from("order_items").insert({
+          ({ error: itemErr } = await supabase.from("order_items").insert({
             order_id: order.id,
             menu_id: null,
             menu_set_id: item.id,
             qty: item.qty,
             price: effectivePrice,
             original_price: origPrice,
-          });
+          }));
         } else {
-          await supabase.from("order_items").insert({
+          ({ error: itemErr } = await supabase.from("order_items").insert({
             order_id: order.id,
             menu_id: item.id,
             menu_set_id: null,
             qty: item.qty,
             price: effectivePrice,
             original_price: origPrice,
-          });
+          }));
+        }
+
+        if (itemErr) {
+          await supabase.from("orders").delete().eq("id", order.id);
+          throw itemErr;
         }
       }
 

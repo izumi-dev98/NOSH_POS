@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import supabase from "../createClients";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function InternalUsageAddStockReport() {
   const [records, setRecords] = useState([]);
@@ -240,10 +241,10 @@ ${reportData.map(row =>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Internal Usage / Add Stock Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
           <button
             onClick={exportToExcel}

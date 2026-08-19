@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
 import { calculateFifoValue } from "../utils/fifoService";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function InventoryReport() {
   const [inventory, setInventory] = useState([]);
@@ -644,10 +645,10 @@ export default function InventoryReport() {
           </button>
 
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Inventory Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
 
           <button

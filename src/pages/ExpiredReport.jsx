@@ -3,13 +3,16 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function ExpiredReport() {
   const [expiryLog, setExpiryLog] = useState([]);
   const [expiredItems, setExpiredItems] = useState([]);
+  const [nearExpiredItems, setNearExpiredItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -29,7 +32,6 @@ export default function ExpiredReport() {
         .from("expiry_log")
         .select("*")
         .order("expired_at", { ascending: false });
-      setExpiryLog(logData || []);
 
       // Fetch currently expired purchase items (for items still marked expired)
       const { data: itemsData } = await supabase
@@ -38,6 +40,41 @@ export default function ExpiredReport() {
         .eq("is_expired", true)
         .order("expiry_date", { ascending: false });
       setExpiredItems(itemsData || []);
+
+      const nearExpiryDate = new Date();
+      nearExpiryDate.setDate(nearExpiryDate.getDate() + 7);
+      const { data: nearItemsData } = await supabase
+        .from("purchase_items")
+        .select("id, item_name, qty, expiry_date, purchase_id, is_expired")
+        .eq("is_expired", false)
+        .gt("expiry_date", new Date().toISOString().split("T")[0])
+        .lte("expiry_date", nearExpiryDate.toISOString().split("T")[0])
+        .gt("qty", 0)
+        .order("expiry_date", { ascending: true });
+
+      const purchaseIds = [...(logData || []), ...(itemsData || []), ...(nearItemsData || [])]
+        .map((item) => item.purchase_id)
+        .filter(Boolean);
+      const { data: purchases } = purchaseIds.length > 0
+        ? await supabase.from("purchases").select("id, invoice_number").in("id", purchaseIds)
+        : { data: [] };
+      const invoiceByPurchaseId = (purchases || []).reduce((map, purchase) => {
+        map[purchase.id] = purchase.invoice_number;
+        return map;
+      }, {});
+
+      setExpiryLog((logData || []).map((log) => ({
+        ...log,
+        status: "Expired",
+        invoice_number: invoiceByPurchaseId[log.purchase_id] || "-"
+      })));
+      setNearExpiredItems((nearItemsData || []).map((item) => ({
+        ...item,
+        expired_qty: item.qty,
+        expired_at: null,
+        status: "Near Expire (1 Week)",
+        invoice_number: invoiceByPurchaseId[item.purchase_id] || "-"
+      })));
     } catch (err) {
       console.error("Error fetching data:", err);
     }
@@ -71,13 +108,26 @@ export default function ExpiredReport() {
     return true;
   });
 
+  const filteredNearExpired = nearExpiredItems.filter((item) => {
+    const expiryDate = item.expiry_date || "";
+    if (filterType === "all") return true;
+    if (filterType === "today") return expiryDate === today;
+    if (filterType === "month") return expiryDate.substring(0, 7) === today.substring(0, 7);
+    if (filterType === "year") return expiryDate.substring(0, 4) === today.substring(0, 4);
+    if (filterType === "custom" && startDate && endDate) return expiryDate >= startDate && expiryDate <= endDate;
+    return true;
+  });
+
   // Filter by search
-  const filtered = filteredLog.filter(log => {
+  const filtered = [...filteredLog, ...filteredNearExpired].filter(log => {
+    if (statusFilter !== "all" && log.status?.toLowerCase() !== statusFilter) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
       log.item_name?.toLowerCase().includes(term) ||
-      log.expiry_date?.includes(term)
+      log.expiry_date?.includes(term) ||
+      log.invoice_number?.toLowerCase().includes(term) ||
+      log.status?.toLowerCase().includes(term)
     );
   });
 
@@ -88,6 +138,7 @@ export default function ExpiredReport() {
   // Summary
   const totalExpired = filtered.length;
   const totalExpiredQty = filtered.reduce((sum, log) => sum + (parseFloat(log.expired_qty) || 0), 0);
+  const nearExpiredCount = filtered.filter((log) => log.status === "Near Expire (1 Week)").length;
 
   // Export Excel
   const exportToExcel = () => {
@@ -96,7 +147,8 @@ export default function ExpiredReport() {
       "Expired Qty": parseFloat(log.expired_qty) || 0,
       "Expiry Date": log.expiry_date || "-",
       "Expired At": log.expired_at ? new Date(log.expired_at).toLocaleString() : "-",
-      "Purchase ID": log.purchase_id || "-"
+      "Status": log.status || "Expired",
+      "Invoice #": log.invoice_number || "-"
     }));
 
     exportData.push({
@@ -104,16 +156,17 @@ export default function ExpiredReport() {
       "Expired Qty": totalExpiredQty,
       "Expiry Date": "",
       "Expired At": "",
-      "Purchase ID": ""
+      "Status": "",
+      "Invoice #": ""
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Expired Report");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Expire Report");
 
     const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     const fileData = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    saveAs(fileData, "Expired_Report.xlsx");
+    saveAs(fileData, "Expire_Report.xlsx");
   };
 
   return (
@@ -121,15 +174,15 @@ export default function ExpiredReport() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Expired Report</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Expire Report</h1>
           <p className="text-sm text-slate-500 mt-1">Track expired items and inventory loss</p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowPreviewModal(true)}
+            onClick={() => openReportPrintPreview("Expire Report")}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
-            Preview & Print
+            Print
           </button>
           <button
             onClick={exportToExcel}
@@ -158,6 +211,19 @@ export default function ExpiredReport() {
             <option value="month">This Month</option>
             <option value="year">This Year</option>
             <option value="custom">Custom Date</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Statuses</option>
+            <option value="expired">Expired</option>
+            <option value="near expire (1 week)">Near Expire (1 Week)</option>
           </select>
 
           {filterType === "custom" && (
@@ -200,7 +266,7 @@ export default function ExpiredReport() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Total Expired Records</p>
+          <p className="text-sm text-slate-500">Report Records</p>
           <p className="text-2xl font-bold text-slate-800">{totalExpired}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
@@ -208,8 +274,8 @@ export default function ExpiredReport() {
           <p className="text-2xl font-bold text-rose-600">{totalExpiredQty}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Currently Expired Items</p>
-          <p className="text-2xl font-bold text-amber-600">{expiredItems.length}</p>
+          <p className="text-sm text-slate-500">Near Expire (1 Week) Items</p>
+          <p className="text-2xl font-bold text-amber-600">{nearExpiredCount}</p>
         </div>
       </div>
 
@@ -222,17 +288,18 @@ export default function ExpiredReport() {
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Expired Qty</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Expiry Date</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Expired At</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-700">Purchase ID</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Invoice #</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading...</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading...</td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">No expired items found</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No expired or near-expire items found</td>
               </tr>
             ) : (
               paginated.map((log) => (
@@ -250,7 +317,12 @@ export default function ExpiredReport() {
                   <td className="px-4 py-3 text-center text-slate-600">
                     {log.expired_at ? new Date(log.expired_at).toLocaleString() : "-"}
                   </td>
-                  <td className="px-4 py-3 text-center text-slate-600">{log.purchase_id || "-"}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${log.status === "Near Expire (1 Week)" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                      {log.status || "Expired"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-slate-600">{log.invoice_number || "-"}</td>
                 </tr>
               ))
             )}
@@ -259,9 +331,7 @@ export default function ExpiredReport() {
             <tr>
               <td className="px-4 py-3 text-right font-bold text-slate-800">Total</td>
               <td className="px-4 py-3 text-center font-bold text-rose-600">{totalExpiredQty}</td>
-              <td></td>
-              <td></td>
-              <td></td>
+              <td colSpan={4}></td>
             </tr>
           </tfoot>
         </table>
@@ -294,7 +364,7 @@ export default function ExpiredReport() {
           <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">Expired Report</h3>
+                <h3 className="text-xl font-bold text-slate-800">Expire Report</h3>
                 <p className="text-sm text-slate-500">
                   Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
@@ -309,7 +379,7 @@ export default function ExpiredReport() {
                     printWindow.document.write(`
                       <html>
                         <head>
-                          <title>Expired Report</title>
+                          <title>Expire Report</title>
                           <style>
                             body { font-family: Arial, sans-serif; padding: 20px; }
                             h1 { font-size: 18px; margin-bottom: 4px; }
@@ -345,7 +415,7 @@ export default function ExpiredReport() {
 
             <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
               <div id="print-expired-content" className="p-4">
-                <h1 className="text-lg font-bold text-slate-800 mb-1">Expired Report</h1>
+                <h1 className="text-lg font-bold text-slate-800 mb-1">Expire Report</h1>
                 <p className="text-sm text-slate-500 mb-4">
                   Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
@@ -358,12 +428,13 @@ export default function ExpiredReport() {
                         <th className="px-4 py-3 text-center font-semibold text-slate-700">Expired Qty</th>
                         <th className="px-4 py-3 text-center font-semibold text-slate-700">Expiry Date</th>
                         <th className="px-4 py-3 text-center font-semibold text-slate-700">Expired At</th>
-                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Purchase ID</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Invoice #</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filtered.length === 0 ? (
-                        <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                        <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
                       ) : (
                         filtered.map((log) => (
                           <tr key={log.id} className="border-b border-slate-100">
@@ -373,16 +444,15 @@ export default function ExpiredReport() {
                             <td className="px-4 py-3 text-center text-slate-600">
                               {log.expired_at ? new Date(log.expired_at).toLocaleDateString() : "-"}
                             </td>
-                            <td className="px-4 py-3 text-center text-slate-600">{log.purchase_id || "-"}</td>
+                            <td className="px-4 py-3 text-center">{log.status || "Expired"}</td>
+                            <td className="px-4 py-3 text-center text-slate-600">{log.invoice_number || "-"}</td>
                           </tr>
                         ))
                       )}
                       <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
                         <td className="px-4 py-3 text-right text-slate-700">TOTAL</td>
                         <td className="px-4 py-3 text-center text-rose-600">{totalExpiredQty}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
+                        <td colSpan="4"></td>
                       </tr>
                     </tbody>
                   </table>
