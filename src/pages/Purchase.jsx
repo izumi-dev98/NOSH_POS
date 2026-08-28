@@ -776,8 +776,8 @@ export default function Purchase({ setInventory }) {
 
       {/* Details Modal */}
       {showDetailModal && (
-        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-xl mx-4">
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] shadow-xl mx-4 flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-slate-800">Purchase Details</h3>
               <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
@@ -798,7 +798,7 @@ export default function Purchase({ setInventory }) {
                 <div><span className="text-slate-500">Credit:</span><span className="ml-2 font-medium">{selectedPurchase?.credit_option}</span></div>
               )}
             </div>
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="border border-slate-200 rounded-lg overflow-auto min-h-0">
               <table className="w-full text-sm">
                 <thead className="bg-slate-100">
                   <tr>

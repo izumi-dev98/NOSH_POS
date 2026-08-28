@@ -36,6 +36,7 @@ export default function InventoryReport() {
   // Opening and movement data for the inventory report
   const [openingDatesMap, setOpeningDatesMap] = useState({});
   const [dailyMovementsMap, setDailyMovementsMap] = useState({});
+  const [selectedMovementMonth, setSelectedMovementMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
     style: "currency",
@@ -101,7 +102,7 @@ export default function InventoryReport() {
 
   useEffect(() => {
     fetchInventory();
-  }, []);
+  }, [selectedMovementMonth]);
 
   // Fetch compare data when compare mode is enabled and dates are set
   useEffect(() => {
@@ -112,6 +113,9 @@ export default function InventoryReport() {
 
   const fetchInventory = async () => {
     setLoading(true);
+    const [selectedYear, selectedMonth] = selectedMovementMonth.split("-").map(Number);
+    const monthStart = `${selectedMovementMonth}-01`;
+    const monthEnd = new Date(Date.UTC(selectedYear, selectedMonth, 0)).toISOString().split("T")[0];
 
     // Get all received purchases with dates for FIFO ordering
     const { data: purchases } = await supabase
@@ -156,21 +160,49 @@ export default function InventoryReport() {
     if (!supData.error) setSuppliers(supData.data || []);
 
     const [{ data: openingData }, { data: movementsData }] = await Promise.all([
-      supabase.from("opening_inventory").select("inventory_id, opening_date, opening_qty"),
-      supabase.from("daily_inventory_movements").select("*").order("movement_date", { ascending: true })
+      supabase.from("opening_inventory").select("inventory_id, opening_date, opening_qty")
+        .gte("opening_date", monthStart).lte("opening_date", monthEnd),
+      supabase.from("daily_inventory_movements")
+        .select("inventory_id, movement_date, opening_qty, purchase_qty, add_stock_qty, sale_usage_qty, internal_usage_qty, closing_qty")
+        .gte("movement_date", monthStart).lte("movement_date", monthEnd)
+        .order("movement_date", { ascending: true })
     ]);
 
     const datesMap = {};
     (openingData || []).forEach((record) => {
-      datesMap[record.inventory_id] = record.opening_date;
+      if (!datesMap[record.inventory_id] || record.opening_date < datesMap[record.inventory_id]) {
+        datesMap[record.inventory_id] = record.opening_date;
+      }
     });
     setOpeningDatesMap(datesMap);
 
     const movementsMap = {};
     (movementsData || []).forEach((movement) => {
-      const current = movementsMap[movement.inventory_id];
-      if (!current || new Date(movement.movement_date) >= new Date(current.movement_date)) {
-        movementsMap[movement.inventory_id] = movement;
+      const current = movementsMap[movement.inventory_id] || {
+        opening_qty: Number(openingData?.find((record) => record.inventory_id === movement.inventory_id)?.opening_qty || movement.opening_qty || 0),
+        purchase_qty: 0,
+        add_stock_qty: 0,
+        sale_usage_qty: 0,
+        internal_usage_qty: 0
+      };
+      current.purchase_qty += Number(movement.purchase_qty || 0);
+      current.add_stock_qty += Number(movement.add_stock_qty || 0);
+      current.sale_usage_qty += Number(movement.sale_usage_qty || 0);
+      current.internal_usage_qty += Number(movement.internal_usage_qty || 0);
+      current.closing_qty = Math.max(0, current.opening_qty + current.purchase_qty + current.add_stock_qty - current.sale_usage_qty - current.internal_usage_qty);
+      movementsMap[movement.inventory_id] = current;
+    });
+    (invData.data || []).forEach((item) => {
+      if (!movementsMap[item.id]) {
+        const opening = openingData?.find((record) => record.inventory_id === item.id);
+        movementsMap[item.id] = {
+          opening_qty: Number(opening?.opening_qty || 0),
+          purchase_qty: 0,
+          add_stock_qty: 0,
+          sale_usage_qty: 0,
+          internal_usage_qty: 0,
+          closing_qty: Number(opening?.opening_qty || 0)
+        };
       }
     });
     setDailyMovementsMap(movementsMap);
@@ -726,6 +758,16 @@ export default function InventoryReport() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
           <div className="flex flex-wrap gap-3">
             {/* Date Filter */}
+            <label className="px-1 py-2 text-sm font-medium text-slate-700">Movement Month:</label>
+            <input
+              type="month"
+              value={selectedMovementMonth}
+              onChange={(e) => {
+                setSelectedMovementMonth(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
             <select
               value={dateFilter}
               onChange={(e) => {
@@ -979,6 +1021,11 @@ export default function InventoryReport() {
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Opening Qty</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Purchase</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Add Stock</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Unit Price</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
@@ -987,14 +1034,15 @@ export default function InventoryReport() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-6">Loading...</td>
+                    <td colSpan="10" className="text-center py-6">Loading...</td>
                   </tr>
                 ) : currentData.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-6">No Data Found</td>
+                    <td colSpan="10" className="text-center py-6">No Data Found</td>
                   </tr>
                 ) : (
                   currentData.map((item, index) => {
+                    const movement = dailyMovementsMap[item.id] || {};
                     return (
                       <tr
                         key={index}
@@ -1004,8 +1052,13 @@ export default function InventoryReport() {
                           {item.item_name}
                         </td>
                         <td className="px-4 py-3 text-gray-600">{item.type}</td>
+                        <td className="px-4 py-3 text-center">{Number(movement.opening_qty || 0)}</td>
+                        <td className="px-4 py-3 text-center text-emerald-600">{Number(movement.purchase_qty || 0)}</td>
+                        <td className="px-4 py-3 text-center text-emerald-600">{Number(movement.add_stock_qty || 0)}</td>
+                        <td className="px-4 py-3 text-center text-red-600">{Number(movement.sale_usage_qty || 0)}</td>
+                        <td className="px-4 py-3 text-center text-red-600">{Number(movement.internal_usage_qty || 0)}</td>
                         <td className={`px-4 py-3 text-center text-sm font-bold ${Number(item.qty || 0) === 0 ? "text-red-600" : "text-emerald-700"}`}>
-                          {Number(item.qty || 0)}
+                          {Number(movement.closing_qty ?? item.qty ?? 0)}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-600">
                           {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
