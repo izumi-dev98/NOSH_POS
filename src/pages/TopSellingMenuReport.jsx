@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function TopSellingMenuReport() {
   const [orders, setOrders] = useState([]);
@@ -101,7 +100,7 @@ export default function TopSellingMenuReport() {
 
   const exportToExcel = () => {
     const rows = aggregated.map((r, idx) => ({ Rank: idx+1, "Menu Name": r.menu_name, "Latest Price": mmkFormatter.format(r.latestPrice || 0), "Total Qty": r.qty }));
-    const html = `<html><head><meta charset="utf-8"></head><body><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Rank</td><td>Menu Name</td><td>Latest Price</td><td>Total Qty</td></tr>${rows.map(row => `<tr><td>${row.Rank}</td><td>${row["Menu Name"]}</td><td>${row["Latest Price"]}</td><td>${row["Total Qty"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="3">Total Items</td><td>${aggregated.reduce((s,r)=>s+r.qty,0)}</td></tr></table></body></html>`;
+    const html = `<html><head><meta charset="utf-8"></head><body><h1>Nosh POS</h1><h2>Top Selling Menu Report</h2><p>Generated: ${new Date().toLocaleDateString()}</p><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Rank</td><td>Menu Name</td><td>Latest Price</td><td>Total Qty</td></tr>${rows.map(row => `<tr><td>${row.Rank}</td><td>${row["Menu Name"]}</td><td>${row["Latest Price"]}</td><td>${row["Total Qty"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="3">Total Items</td><td>${aggregated.reduce((s,r)=>s+r.qty,0)}</td></tr></table></body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -117,7 +116,7 @@ export default function TopSellingMenuReport() {
           <p className="text-sm text-slate-500 mt-1">Shows top selling menu items sorted by quantity sold</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => openReportPrintPreview("Top Selling Menu Report")} className="px-4 py-2 bg-violet-600 text-white rounded">Print</button>
+          <button onClick={() => setShowPreviewModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded">Print</button>
           <button onClick={exportToExcel} className="px-4 py-2 bg-emerald-600 text-white rounded">Export Excel</button>
         </div>
       </div>

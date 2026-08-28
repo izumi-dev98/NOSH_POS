@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
 import { calculateFifoValue } from "../utils/fifoService";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function InventoryReport() {
   const [inventory, setInventory] = useState([]);
@@ -541,30 +540,33 @@ export default function InventoryReport() {
   const exportToExcel = () => {
     let exportData = [];
     let fileName = "Inventory_Report.xlsx";
+    const generatedDate = new Date().toLocaleDateString("en-MM", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
 
     if (compareMode) {
       // Compare mode export - Daily Transactions
       exportData = filteredCompareData.map((item) => ({
-        Item_Name: item.item_name,
-        Unit: item.type,
+        "Item Name": item.item_name,
+        Unit: item.type || "-",
         Received: item.received_qty,
         Added: item.added_qty,
         Reduced: item.reduced_qty,
         Returned: item.returned_qty,
-        Net_Change: item.change_qty,
-        Price: item.unit_price,
+        "Net Change": item.change_qty,
       }));
 
       // Add summary row
       exportData.push({
-        Item_Name: "TOTAL",
+        "Item Name": "TOTAL",
         Unit: "",
         Received: compareTotalReceived,
         Added: compareTotalAdded,
         Reduced: compareTotalReduced,
         Returned: compareTotalReturned,
-        Net_Change: compareTotalChange,
-        Price: "",
+        "Net Change": compareTotalChange,
       });
 
       fileName = `Inventory_Daily_${compareFrom}_to_${compareTo}.xlsx`;
@@ -573,27 +575,47 @@ export default function InventoryReport() {
       exportData = filteredData.map((item) => {
         const latestPrice = getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price);
         return {
-          Item_Name: item.item_name,
-          Quantity: item.qty,
-          Unit: item.type,
-          Price: latestPrice,
-          Total_Value: getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price),
-          Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
+          "Item Name": item.item_name,
+          Unit: item.type || "-",
+          "Closing Qty": item.qty,
+          "Latest Unit Price": latestPrice,
+          "Total Value": getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price),
         };
       });
 
       // Add summary row
       exportData.push({
-        Item_Name: "TOTAL",
-        Quantity: totalQty,
+        "Item Name": "TOTAL",
         Unit: "",
-        Price: "",
-        Total_Value: totalValue,
-        Created_At: "",
+        "Closing Qty": totalQty,
+        "Latest Unit Price": "",
+        "Total Value": totalValue,
       });
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      [compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"],
+      [compareMode
+        ? `Period: ${compareFrom || "..."} to ${compareTo || "..."}`
+        : `Generated: ${generatedDate}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
+    worksheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+    worksheet["!cols"] = headers.map((header) => ({ wch: Math.max(header.length + 2, 16) }));
+    if (!compareMode) {
+      const quantityColumn = headers.indexOf("Closing Qty");
+      filteredData.forEach((item, index) => {
+        if (Number(item.qty || 0) !== 0 || quantityColumn === -1) return;
+        headers.forEach((_, columnIndex) => {
+          const cell = worksheet[XLSX.utils.encode_cell({ r: index + 5, c: columnIndex })];
+          if (cell) cell.s = { font: { color: { rgb: "FFDC2626" }, bold: true } };
+        });
+      });
+    }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Report");
 
@@ -645,7 +667,7 @@ export default function InventoryReport() {
           </button>
 
           <button
-            onClick={() => openReportPrintPreview("Inventory Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print
@@ -958,7 +980,7 @@ export default function InventoryReport() {
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Buying Price</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Unit Price</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
                 </tr>
               </thead>
@@ -982,7 +1004,7 @@ export default function InventoryReport() {
                           {item.item_name}
                         </td>
                         <td className="px-4 py-3 text-gray-600">{item.type}</td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-emerald-700">
+                        <td className={`px-4 py-3 text-center text-sm font-bold ${Number(item.qty || 0) === 0 ? "text-red-600" : "text-emerald-700"}`}>
                           {Number(item.qty || 0)}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-600">
@@ -1026,13 +1048,13 @@ export default function InventoryReport() {
       {/* Preview & Print Modal */}
       {showPreviewModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                   {compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"}
                 </h3>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {compareMode
                     ? `Period: ${compareFrom || '...'} to ${compareTo || '...'}`
                     : `Generated: ${new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}`}
@@ -1067,11 +1089,14 @@ export default function InventoryReport() {
                             .red { color: #dc2626; }
                             .orange { color: #ea580c; }
                             .slate { color: #64748b; }
+                            .zero-row td { color: #dc2626; font-weight: 700; }
+                            .print-button { background: #4f46e5; color: white; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; margin-bottom: 16px; }
                             @page { size: auto; margin: 10mm; }
-                            @media print { body { padding: 0; } }
+                            @media print { body { padding: 0; } .print-button { display: none; } }
                           </style>
                         </head>
                         <body>
+                          <button class="print-button" onclick="window.print()">Print</button>
                           <div class="brand">Nosh POS</div>
                           ${printContent.innerHTML}
                           <script>window.onload = function() { window.print(); }</script>
@@ -1084,11 +1109,11 @@ export default function InventoryReport() {
                 >
                   Print
                 </button>
-                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200 text-xl">X</button>
               </div>
             </div>
 
-            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden flex-1 overflow-y-auto">
               <div id="print-report-content" className="p-4">
                 <h1 className="text-lg font-bold text-slate-800 mb-1">
                   {compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"}
@@ -1102,7 +1127,7 @@ export default function InventoryReport() {
                 <div className="overflow-x-auto">
                   {compareMode ? (
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-100">
+                      <thead className="bg-slate-100 dark:bg-slate-800">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
                           <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
@@ -1121,9 +1146,9 @@ export default function InventoryReport() {
                             const netChangeBg = item.change_qty > 0 ? 'bg-emerald-100 text-emerald-700' :
                                                item.change_qty < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
                             return (
-                              <tr key={index} className="border-b border-slate-100 hover:bg-indigo-50 transition">
-                                <td className="px-4 py-3 font-medium text-slate-700">{item.item_name}</td>
-                                <td className="px-4 py-3 text-slate-600">{item.type || '-'}</td>
+                              <tr key={index} className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-slate-800 transition">
+                                <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-100">{item.item_name}</td>
+                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.type || '-'}</td>
                                 <td className="px-4 py-3 text-right text-emerald-600 font-medium">
                                   {item.received_qty > 0 ? `+${item.received_qty}` : <span className="text-slate-400">-</span>}
                                 </td>
@@ -1149,12 +1174,12 @@ export default function InventoryReport() {
                     </table>
                   ) : (
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-100">
+                      <thead className="bg-slate-100 dark:bg-slate-800">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
-                          <th className="px-4 py-3 text-center font-semibold text-slate-700">Quantity</th>
+                          <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                           <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
-                          <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Price</th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Unit Price</th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
                         </tr>
                       </thead>
@@ -1163,8 +1188,8 @@ export default function InventoryReport() {
                           <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
                         ) : (
                           filteredData.map((item, index) => (
-                            <tr key={index} className="border-b border-slate-100 hover:bg-indigo-50 transition">
-                              <td className="px-4 py-3 font-medium text-slate-700">{item.item_name}</td>
+                            <tr key={index} className={`border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-slate-800 transition ${Number(item.qty || 0) === 0 ? "zero-row" : ""}`}>
+                              <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-100">{item.item_name}</td>
                               <td className="px-4 py-3 text-center">
                                 {item.qty < 5 ? (
                                   <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold">{item.qty}</span>
@@ -1174,17 +1199,27 @@ export default function InventoryReport() {
                                   <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-semibold">{item.qty}</span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-slate-600">{item.type}</td>
-                              <td className="px-4 py-3 text-right text-slate-600">
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.type}</td>
+                              <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">
                                 {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
                               </td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-700">
+                              <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-100">
                                 {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
                               </td>
                             </tr>
                           ))
                         )}
                       </tbody>
+                      {filteredData.length > 0 && (
+                        <tfoot>
+                          <tr className="font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-100">
+                            <td className="px-4 py-3">TOTAL</td>
+                            <td className="px-4 py-3 text-center">{totalQty}</td>
+                            <td colSpan="2" className="px-4 py-3 text-right">Total Amount</td>
+                            <td className="px-4 py-3 text-right">{formatMMK(totalValue)}</td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   )}
                 </div>
@@ -1192,7 +1227,7 @@ export default function InventoryReport() {
             </div>
 
             <div className="flex justify-end mt-4">
-              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">Close</button>
             </div>
           </div>
         </div>

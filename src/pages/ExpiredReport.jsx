@@ -3,7 +3,6 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function ExpiredReport() {
   const [expiryLog, setExpiryLog] = useState([]);
@@ -143,7 +142,7 @@ export default function ExpiredReport() {
   // Export Excel
   const exportToExcel = () => {
     const exportData = filtered.map((log) => ({
-      "Item": log.item_name,
+      "Item Name": log.item_name,
       "Expired Qty": parseFloat(log.expired_qty) || 0,
       "Expiry Date": log.expiry_date || "-",
       "Expired At": log.expired_at ? new Date(log.expired_at).toLocaleString() : "-",
@@ -152,7 +151,7 @@ export default function ExpiredReport() {
     }));
 
     exportData.push({
-      "Item": "TOTAL",
+      "Item Name": "TOTAL",
       "Expired Qty": totalExpiredQty,
       "Expiry Date": "",
       "Expired At": "",
@@ -160,7 +159,15 @@ export default function ExpiredReport() {
       "Invoice #": ""
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Expire Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Expire Report");
 
@@ -179,7 +186,7 @@ export default function ExpiredReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Expire Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print

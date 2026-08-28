@@ -37,11 +37,21 @@ import SupplierOutstanding from "./pages/SupplierOutstanding";
 import SaleUsageReport from "./pages/SaleUsageReport";
 import TopSellingMenuReport from "./pages/TopSellingMenuReport";
 
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return null;
+  }
+};
+
 export default function App() {
   const [isOpen, setIsOpen] = useState(window.innerWidth >= 768);
   const [inventory, setInventory] = useState([]);
   const [menu, setMenu] = useState([]);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    return getStoredUser();
+  });
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -69,13 +79,13 @@ export default function App() {
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
+      setUser(session?.user || getStoredUser());
       setLoading(false);
     };
     getSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+      setUser(session?.user || getStoredUser());
       setLoading(false);
     });
 

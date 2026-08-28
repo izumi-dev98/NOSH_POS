@@ -3,7 +3,6 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function PurchaseReturnReport() {
   const [returns, setReturns] = useState([]);
@@ -172,7 +171,7 @@ export default function PurchaseReturnReport() {
       "Date": ret.created_at ? new Date(ret.created_at).toLocaleDateString() : "-",
       "Status": ret.status || "pending",
       "Items": ret.items_count,
-      "Total Amount": parseFloat(ret.total_amount) || 0
+      "Returned Amount": parseFloat(ret.total_amount) || 0
     }));
 
     // Add summary row
@@ -181,10 +180,18 @@ export default function PurchaseReturnReport() {
       "Date": "",
       "Status": "",
       "Items": totalItems,
-      "Total Amount": totalAmount
+      "Returned Amount": totalAmount
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Purchase Return Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase Return Report");
 
@@ -223,7 +230,7 @@ export default function PurchaseReturnReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Purchase Return Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print

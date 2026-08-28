@@ -3,7 +3,6 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function PurchaseReport() {
   const [purchases, setPurchases] = useState([]);
@@ -227,16 +226,24 @@ export default function PurchaseReport() {
       "Invoice #": p.invoice_number,
       "Date": p.date,
       "Supplier": getSupplierName(p.supplier_id),
-      "Total Amount": p.total_amount,
-      "Discount (%)": p.discount || 0,
-      "Tax (%)": p.tax || 0,
-      "Payment Type": p.payment_type || "Cash Down",
-      "Credit Option": p.credit_option || "-",
+      "Total": calculateTotal(p),
+      "Discount": p.discount ? `${p.discount}%` : "-",
+      "Tax": p.tax ? `${p.tax}%` : "-",
+      "Payment": p.payment_type === "Credit" && p.credit_option
+        ? `Credit (${p.credit_option})`
+        : p.payment_type || "Cash Down",
       "Status": p.status,
-      "Notes": p.notes || ""
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Purchase Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase Orders");
 
@@ -291,7 +298,7 @@ export default function PurchaseReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Purchase Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print

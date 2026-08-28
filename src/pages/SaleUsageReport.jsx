@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function SaleUsageReport() {
   const [orders, setOrders] = useState([]);
@@ -315,7 +314,7 @@ export default function SaleUsageReport() {
       "Usage Details": item.usage_item_details,
       "Total Price": mmkFormatter.format(item.usage_total_price),
     }));
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Slip ID</td><td>Menus</td><td>Usage Items</td><td>Usage Details</td><td>Total Price</td></tr>${reportData.map((row) => `<tr><td>${row["Slip ID"]}</td><td>${row["Menus"]}</td><td>${row["Usage Items"]}</td><td>${row["Usage Details"]}</td><td>${row["Total Price"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="4">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td></tr></table></body></html>`;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><h1>Nosh POS</h1><h2>Sale Usage Report</h2><p>Generated: ${new Date().toLocaleDateString()}</p><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Slip ID</td><td>Menus</td><td>Usage Items</td><td>Usage Details</td><td>Total Price</td></tr>${reportData.map((row) => `<tr><td>${row["Slip ID"]}</td><td>${row["Menus"]}</td><td>${row["Usage Items"]}</td><td>${row["Usage Details"]}</td><td>${row["Total Price"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="4">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td></tr></table></body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -332,7 +331,7 @@ export default function SaleUsageReport() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => openReportPrintPreview("Sale Usage Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print

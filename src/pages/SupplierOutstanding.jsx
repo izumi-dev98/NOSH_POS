@@ -278,11 +278,19 @@ export default function SupplierOutstanding() {
         "Payment Method": "-",
         "Total Amount": "-",
         "Paid Status": "-",
-        "Amount": s.total_payable
+        "Remaining Amount": s.total_payable
       });
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Supplier Outstanding Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Supplier Outstanding");
 

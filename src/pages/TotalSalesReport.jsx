@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import supabase from "../createClients";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function TotalSalesReport() {
   const [orderItems, setOrderItems] = useState([]);
@@ -317,13 +316,13 @@ export default function TotalSalesReport() {
       const completeText = slip.completed_by_name || slip.completed_by || "";
       const displayRemark = slip.remark || "";
       return {
-        Slip_ID: slip.order_id,
+        "Slip ID": slip.order_id,
         Menu: menusText,
         Qty: slip.qty,
         Subtotal: slip.subtotal,
         Discount: slip.discount_amount + slip.item_discount,
         Tax: slip.tax_amount,
-        Grand_Total: slip.total,
+        "Grand Total": slip.total,
         Payment: paymentText,
         Completed: completeText,
         Remark: displayRemark,
@@ -333,19 +332,27 @@ export default function TotalSalesReport() {
 
     // Add total row
     exportData.push({
-      Slip_ID: "",
+      "Slip ID": "",
       Menu: "TOTAL AMOUNT",
       Qty: "",
       Subtotal: totalSubtotal,
       Discount: totalDiscount,
       Tax: totalTax,
-      Grand_Total: grandTotal,
+      "Grand Total": grandTotal,
       Payment: "",
       Remark: "",
       Date: "",
     });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Total Sales Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales Report");
     const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -364,7 +371,7 @@ export default function TotalSalesReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Total Sales Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print

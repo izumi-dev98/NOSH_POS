@@ -1,6 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function InternalUsageAddStockReport() {
   const [records, setRecords] = useState([]);
@@ -165,6 +164,84 @@ export default function InternalUsageAddStockReport() {
 
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
 
+  const printReport = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    let grandTotal = 0;
+    const reportRows = filteredRecords.flatMap((record) => {
+      const items = recordItemsMap[record.id] || [];
+      return items.map((item) => {
+        const inv = inventory.find((i) => i.id === item.inventory_id);
+        const categoryField = record.record_type === "add_stock" ? "add_stock_category_id" : "usage_stock_category_id";
+        const categories = record.record_type === "add_stock" ? addStockCategories : usageCategories;
+        const categoryName = categories.find((category) => category.id === item[categoryField])?.name || "";
+        const beforeQty = inv ? inv.qty - item.qty : item.qty;
+        const afterQty = inv ? inv.qty : item.qty;
+        const unitPrice = Number(inv?.price || 0);
+        const lineTotal = unitPrice * (Number(item.qty) || 0);
+        grandTotal += lineTotal;
+
+        return `<tr>
+          <td>${new Date(record.created_at).toLocaleDateString()}</td>
+          <td>${record.display_id}</td>
+          <td>${record.record_type === "add_stock" ? "Add Stock" : "Internal Usage"}</td>
+          <td>${categoryName}</td>
+          <td>${inv?.item_name || "Unknown"}</td>
+          <td class="number">${beforeQty}</td>
+          <td class="number">${item.qty}</td>
+          <td class="number">${afterQty}</td>
+          <td>${inv?.type || "-"}</td>
+          <td class="number">${mmkFormatter.format(unitPrice)}</td>
+          <td class="number">${mmkFormatter.format(lineTotal)}</td>
+          <td>${record.user_name || user?.email || "-"}</td>
+          <td>${record.notes || "-"}</td>
+        </tr>`;
+      });
+    }).join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Nosh POS - Internal Usage / Add Stock Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
+            h1 { font-size: 20px; margin-bottom: 4px; }
+            h2 { font-size: 16px; margin: 0 0 4px; }
+            .subtitle { color: #64748b; font-size: 12px; margin: 0 0 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+            th { background: #f1f5f9; }
+            .number { text-align: right; }
+            .total { font-weight: 700; background: #f1f5f9; }
+            .print-button { background: #4f46e5; color: white; border: 0; border-radius: 6px; padding: 9px 18px; cursor: pointer; margin-bottom: 16px; }
+            .print-button:hover { background: #3730a3; }
+            .print-button:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
+            @media print { body { padding: 0; } .print-button { display: none; } }
+            @page { size: auto; margin: 10mm; }
+          </style>
+        </head>
+        <body>
+          <button class="print-button" onclick="window.print()">Print</button>
+          <h1>Nosh POS</h1>
+          <h2>Internal Usage / Add Stock Report</h2>
+          <p class="subtitle">Generated: ${new Date().toLocaleDateString()}</p>
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Record ID</th><th>Type</th><th>Category</th><th>Item Name</th>
+              <th>Before Qty</th><th>Qty</th><th>Closing Qty</th><th>Unit</th><th>Unit Price</th>
+              <th>Line Total</th><th>User Name</th><th>Notes</th>
+            </tr></thead>
+            <tbody>${reportRows || '<tr><td colspan="13">No data found</td></tr>'}</tbody>
+            <tfoot><tr class="total"><td colspan="10">Grand Total</td><td class="number">${mmkFormatter.format(grandTotal)}</td><td colspan="2"></td></tr></tfoot>
+          </table>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const exportToExcel = async () => {
     const reportData = [];
     let grandTotal = 0;
@@ -200,7 +277,8 @@ export default function InternalUsageAddStockReport() {
     }
 
     let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"></head><body>
+<head><meta charset="utf-8"><title>Nosh POS - Internal Usage / Add Stock Report</title></head><body>
+<h1>Nosh POS</h1><h2>Internal Usage / Add Stock Report</h2><p>Generated: ${new Date().toLocaleDateString()}</p>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
 <td>Date</td><td>Record ID</td><td>Type</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Qty</td><td>Closing Qty</td><td>Unit</td><td>Unit Price</td><td>Line Total</td><td>User Name</td><td>Notes</td>
@@ -241,7 +319,7 @@ ${reportData.map(row =>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Internal Usage / Add Stock Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print
@@ -484,6 +562,70 @@ ${reportData.map(row =>
             </div>
           </div>
         </>
+      )}
+
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Nosh POS</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Internal Usage / Add Stock Report | Generated: {new Date().toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={printReport}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  Print
+                </button>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-800">
+                  <tr>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">Record ID</th>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">Type</th>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">Date</th>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">Category</th>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">User</th>
+                    <th className="px-4 py-3 text-slate-700 dark:text-slate-200">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.length === 0 ? (
+                    <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-500">No records found</td></tr>
+                  ) : filteredRecords.map((record) => {
+                    const categoryField = record.record_type === "add_stock" ? "add_stock_category_id" : "usage_stock_category_id";
+                    const categories = record.record_type === "add_stock" ? addStockCategories : usageCategories;
+                    const categoryNames = [...new Set((recordItemsMap[record.id] || [])
+                      .map((item) => categories.find((category) => category.id === item[categoryField])?.name)
+                      .filter(Boolean))].join(", ");
+                    return (
+                      <tr key={record.id} className="border-t border-slate-100 hover:bg-indigo-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100">{record.display_id}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record.record_type === "add_stock" ? "Add Stock" : "Internal Usage"}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(record.created_at).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{categoryNames || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record.user_name || user?.email || "-"}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record.notes || "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

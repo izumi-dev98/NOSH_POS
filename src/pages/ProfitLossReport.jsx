@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
-import { openReportPrintPreview } from "../utils/reportPrintPreview";
 
 export default function ProfitLossReport() {
   const [rows, setRows] = useState([]);
@@ -138,7 +137,7 @@ export default function ProfitLossReport() {
       Profit: row.profit,
       Loss: row.loss,
       Net: row.net,
-      Change_Percent: row.changePct == null ? "-" : `${row.changePct.toFixed(2)}%`,
+      "MoM %": row.changePct == null ? "-" : `${row.changePct.toFixed(2)}%`,
       Result: row.result,
     }));
 
@@ -149,11 +148,19 @@ export default function ProfitLossReport() {
       Profit: totals.profit,
       Loss: totals.loss,
       Net: totals.net,
-      Change_Percent: "-",
+      "MoM %": "-",
       Result: totals.net > 0 ? "profit" : totals.net < 0 ? "loss" : "breakeven",
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const headers = Object.keys(exportData[0] || {});
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Nosh POS"],
+      ["Profit & Loss Report"],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...exportData.map((item) => headers.map((header) => item[header] ?? "")),
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Profit_Loss_Report");
     const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
@@ -179,7 +186,7 @@ export default function ProfitLossReport() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => openReportPrintPreview("Profit & Loss Report")}
+            onClick={() => setShowPreviewModal(true)}
             className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
           >
             Print
