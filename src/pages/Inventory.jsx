@@ -68,6 +68,7 @@ export default function Inventory({
   const [dailyMovementsMap, setDailyMovementsMap] = useState({});
   const [movementTotalsMap, setMovementTotalsMap] = useState({});
   const [itemSearchInModal, setItemSearchInModal] = useState("");
+  const [selectedMovementMonth, setSelectedMovementMonth] = useState(new Date().toISOString().slice(0, 7));
 
   // Get category name by ID
   const getCategoryName = (categoryId) => {
@@ -128,22 +129,79 @@ export default function Inventory({
     fetchLatestPrices();
     fetchSuppliers();
     fetchAllOpeningDates();
-  }, [inventory]);
+  }, [inventory, selectedMovementMonth]);
+
+  const getMonthBounds = (month) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    const start = `${month}-01`;
+    const end = new Date(Date.UTC(year, monthNumber, 0)).toISOString().split("T")[0];
+    return { start, end };
+  };
+
+  const ensureMonthlyOpeningRecords = async (openingRecords, movements) => {
+    const { start } = getMonthBounds(selectedMovementMonth);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    if (selectedMovementMonth < currentMonth) return openingRecords;
+    const monthRecords = openingRecords.filter((record) => record.opening_date.startsWith(`${selectedMovementMonth}-`));
+    const existingByInventoryId = new Map(
+      monthRecords
+        .map((record) => [record.inventory_id, record])
+    );
+    const previousMovements = new Map();
+    const previousOpenings = new Map();
+
+    movements
+      .filter((movement) => movement.movement_date < start)
+      .forEach((movement) => {
+        const previous = previousMovements.get(movement.inventory_id);
+        if (!previous || movement.movement_date > previous.movement_date) {
+          previousMovements.set(movement.inventory_id, movement);
+        }
+      });
+
+    openingRecords
+      .filter((record) => record.opening_date < start)
+      .forEach((record) => {
+        const previous = previousOpenings.get(record.inventory_id);
+        if (!previous || record.opening_date > previous.opening_date) {
+          previousOpenings.set(record.inventory_id, record);
+        }
+      });
+
+    const missingRecords = inventory
+      .filter((item) => !existingByInventoryId.has(item.id))
+      .map((item) => ({
+        inventory_id: item.id,
+        opening_date: start,
+        opening_qty: Number(
+          previousMovements.get(item.id)?.closing_qty
+          ?? previousOpenings.get(item.id)?.opening_qty
+          ?? item.qty
+          ?? 0
+        )
+      }));
+
+    if (missingRecords.length > 0) {
+      const { data, error } = await supabase
+        .from("opening_inventory")
+        .insert(missingRecords)
+        .select("inventory_id, opening_date, opening_qty");
+      if (error) throw error;
+      return [...openingRecords, ...(data || [])];
+    }
+
+    return openingRecords;
+  };
 
   // Fetch all opening inventory dates
   const fetchAllOpeningDates = async () => {
     try {
       const { data: openingData, error: openingError } = await supabase
         .from("opening_inventory")
-        .select("inventory_id, opening_date, opening_qty");
+        .select("inventory_id, opening_date, opening_qty")
+        .order("opening_date", { ascending: true });
 
       if (openingError) throw openingError;
-
-      const datesMap = {};
-      openingData?.forEach((record) => {
-        datesMap[record.inventory_id] = record.opening_date;
-      });
-      setOpeningDatesMap(datesMap);
 
       const { data: movements, error: movementsError } = await supabase
         .from("daily_inventory_movements")
@@ -152,22 +210,66 @@ export default function Inventory({
 
       if (movementsError) throw movementsError;
 
+      const monthlyOpeningData = await ensureMonthlyOpeningRecords(openingData || [], movements || []);
+      const { start, end } = getMonthBounds(selectedMovementMonth);
+
       const movementsMap = {};
       const totalsMap = {};
-      movements?.forEach((movement) => {
-        const current = movementsMap[movement.inventory_id];
-        if (!current || new Date(movement.movement_date) >= new Date(current.movement_date)) {
-          movementsMap[movement.inventory_id] = movement;
+      const monthlyOpenings = {};
+      monthlyOpeningData.forEach((record) => {
+        if (record.opening_date.startsWith(`${selectedMovementMonth}-`)) {
+          const current = monthlyOpenings[record.inventory_id];
+          if (!current || record.opening_date < current.opening_date) {
+            monthlyOpenings[record.inventory_id] = record;
+          }
         }
+      });
 
-        const totals = totalsMap[movement.inventory_id] || { sale_usage_qty: 0, internal_usage_qty: 0 };
-        totals.sale_usage_qty += Number(movement.sale_usage_qty || 0);
-        totals.internal_usage_qty += Number(movement.internal_usage_qty || 0);
-        totalsMap[movement.inventory_id] = totals;
+      movements
+        .filter((movement) => movement.movement_date >= start && movement.movement_date <= end)
+        .forEach((movement) => {
+          const totals = totalsMap[movement.inventory_id] || {
+            purchase_qty: 0,
+            add_stock_qty: 0,
+            sale_usage_qty: 0,
+            internal_usage_qty: 0
+          };
+          totals.purchase_qty += Number(movement.purchase_qty || 0);
+          totals.add_stock_qty += Number(movement.add_stock_qty || 0);
+          totals.sale_usage_qty += Number(movement.sale_usage_qty || 0);
+          totals.internal_usage_qty += Number(movement.internal_usage_qty || 0);
+          totalsMap[movement.inventory_id] = totals;
+        });
+
+      inventory.forEach((item) => {
+        const openingQty = Number(monthlyOpenings[item.id]?.opening_qty || 0);
+        const totals = totalsMap[item.id] || {
+          purchase_qty: 0,
+          add_stock_qty: 0,
+          sale_usage_qty: 0,
+          internal_usage_qty: 0
+        };
+        movementsMap[item.id] = {
+          opening_qty: openingQty,
+          ...totals,
+          closing_qty: Math.max(
+            0,
+            openingQty + totals.purchase_qty + totals.add_stock_qty - totals.sale_usage_qty - totals.internal_usage_qty
+          )
+        };
       });
 
       setDailyMovementsMap(movementsMap);
       setMovementTotalsMap(totalsMap);
+
+      const datesMap = {};
+      monthlyOpeningData.forEach((record) => {
+        if (record.opening_date.startsWith(`${selectedMovementMonth}-`)) {
+          const current = datesMap[record.inventory_id];
+          if (!current || record.opening_date < current) datesMap[record.inventory_id] = record.opening_date;
+        }
+      });
+      setOpeningDatesMap(datesMap);
     } catch (err) {
       console.error("Error fetching opening dates and movements:", err);
     }
@@ -196,11 +298,12 @@ export default function Inventory({
   // Fetch opening inventory data for an item
   const fetchOpeningInventory = async (item) => {
     try {
+      const { start } = getMonthBounds(selectedMovementMonth);
       const { data, error } = await supabase
         .from("opening_inventory")
         .select("*")
         .eq("inventory_id", item.id)
-        .order("opening_date", { ascending: false })
+        .eq("opening_date", start)
         .limit(1);
 
       if (error) throw error;
@@ -214,8 +317,8 @@ export default function Inventory({
       } else {
         setCurrentOpeningInventory(null);
         setOpeningData({
-          opening_date: new Date().toISOString().split('T')[0],
-          opening_qty: item.qty.toString()
+          opening_date: start,
+          opening_qty: (dailyMovementsMap[item.id]?.opening_qty ?? item.qty ?? 0).toString()
         });
       }
     } catch (err) {
@@ -739,6 +842,16 @@ export default function Inventory({
       {/* Creation Date Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <div className="flex flex-wrap gap-3 items-center">
+          <label className="text-sm font-medium text-slate-700">Movement Month:</label>
+          <input
+            type="month"
+            value={selectedMovementMonth}
+            onChange={(e) => {
+              setSelectedMovementMonth(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
           <label className="text-sm font-medium text-slate-700">Filter by Item Creation Date:</label>
           <input
             type="date"
@@ -841,6 +954,8 @@ export default function Inventory({
                     closing_qty: 0,
                   };
                   const movementTotals = movementTotalsMap[item.id] || {
+                    purchase_qty: 0,
+                    add_stock_qty: 0,
                     sale_usage_qty: 0,
                     internal_usage_qty: 0,
                   };
@@ -890,8 +1005,8 @@ export default function Inventory({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-xs">
-                        <span className={`px-2 py-1 rounded font-semibold ${Number(item.qty || 0) > 2 ? " text-green-600" : " text-red-700"}`}>
-                          {Number(item.qty || 0)}
+                        <span className={`px-2 py-1 rounded font-semibold ${Number(movement.closing_qty || 0) > 2 ? " text-green-600" : " text-red-700"}`}>
+                          {Number(movement.closing_qty || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-medium text-xs">
