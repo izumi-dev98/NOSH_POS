@@ -1,41 +1,41 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Swal from "sweetalert2";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
-import Dashboard from "./pages/Dashboard";
-import Payments from "./pages/Pyaments";
-import History from "./pages/History";
-import Menu from "./pages/Menu";
-import Category from "./pages/Category";
-import Inventory from "./pages/Inventory";
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Payments = lazy(() => import("./pages/Pyaments"));
+const History = lazy(() => import("./pages/History"));
+const Menu = lazy(() => import("./pages/Menu"));
+const Category = lazy(() => import("./pages/Category"));
+const Inventory = lazy(() => import("./pages/Inventory"));
 
 import supabase from "./createClients";
 import { fetchExpiringSoonPurchaseItems, runExpiryCheck } from "./utils/expiryService";
-import InventoryReport from "./pages/InventoryReport";
-import TotalSalesReport from "./pages/TotalSalesReport";
-import InternalUsageAddStockReport from "./pages/InternalUsageAddStockReport";
-import ProfitLossReport from "./pages/ProfitLossReport";
-import UserRight from "./pages/UserRight";
+const InventoryReport = lazy(() => import("./pages/InventoryReport"));
+const TotalSalesReport = lazy(() => import("./pages/TotalSalesReport"));
+const InternalUsageAddStockReport = lazy(() => import("./pages/InternalUsageAddStockReport"));
+const ProfitLossReport = lazy(() => import("./pages/ProfitLossReport"));
+const UserRight = lazy(() => import("./pages/UserRight"));
 
-import UserCreate from "./pages/UserCreate";
-import InternalConsumption from "./pages/InternalConsumption";
-import DiscountType from "./pages/DiscountType";
+const UserCreate = lazy(() => import("./pages/UserCreate"));
+const InternalConsumption = lazy(() => import("./pages/InternalConsumption"));
+const DiscountType = lazy(() => import("./pages/DiscountType"));
 
 import PrivateRoute from "./pages/PrivateRoute";
-import Login from "./pages/Login";
-import Logout from "./pages/Logout";
+const Login = lazy(() => import("./pages/Login"));
+const Logout = lazy(() => import("./pages/Logout"));
 
-import Supplier from "./pages/Supplier";
-import Purchase from "./pages/Purchase";
-import PurchaseReturn from "./pages/PurchaseReturn";
-import PurchaseReport from "./pages/PurchaseReport";
-import PurchaseReturnReport from "./pages/PurchaseReturnReport";
-import ExpiredReport from "./pages/ExpiredReport";
-import SupplierOutstanding from "./pages/SupplierOutstanding";
-import SaleUsageReport from "./pages/SaleUsageReport";
-import TopSellingMenuReport from "./pages/TopSellingMenuReport";
+const Supplier = lazy(() => import("./pages/Supplier"));
+const Purchase = lazy(() => import("./pages/Purchase"));
+const PurchaseReturn = lazy(() => import("./pages/PurchaseReturn"));
+const PurchaseReport = lazy(() => import("./pages/PurchaseReport"));
+const PurchaseReturnReport = lazy(() => import("./pages/PurchaseReturnReport"));
+const ExpiredReport = lazy(() => import("./pages/ExpiredReport"));
+const SupplierOutstanding = lazy(() => import("./pages/SupplierOutstanding"));
+const SaleUsageReport = lazy(() => import("./pages/SaleUsageReport"));
+const TopSellingMenuReport = lazy(() => import("./pages/TopSellingMenuReport"));
 
 const getStoredUser = () => {
   try {
@@ -229,7 +229,8 @@ export default function App() {
       <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${user && isOpen ? "ml-60" : "ml-0"}`}>
         {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} />}
         <main className={`p-6 ${user ? "pt-16" : ""}`}>
-          <Routes>
+          <Suspense fallback={<div className="flex justify-center items-center min-h-[240px] text-slate-600 dark:text-slate-300">Loading page...</div>}>
+            <Routes>
             {/* Login redirects to dashboard if already logged in */}
             <Route
               path="/"
@@ -273,7 +274,8 @@ export default function App() {
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>

@@ -128,6 +128,9 @@ export default function Inventory({
     fetchCategories();
     fetchLatestPrices();
     fetchSuppliers();
+  }, []);
+
+  useEffect(() => {
     fetchAllOpeningDates();
   }, [inventory, selectedMovementMonth]);
 
@@ -136,6 +139,11 @@ export default function Inventory({
     const start = `${month}-01`;
     const end = new Date(Date.UTC(year, monthNumber, 0)).toISOString().split("T")[0];
     return { start, end };
+  };
+
+  const getPreviousMonth = (month) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    return new Date(Date.UTC(year, monthNumber - 2, 1)).toISOString().slice(0, 7);
   };
 
   const ensureMonthlyOpeningRecords = async (openingRecords, movements) => {
@@ -196,22 +204,28 @@ export default function Inventory({
   // Fetch all opening inventory dates
   const fetchAllOpeningDates = async () => {
     try {
+      const { start, end } = getMonthBounds(selectedMovementMonth);
+      const previousMonth = getPreviousMonth(selectedMovementMonth);
+      const { start: previousStart } = getMonthBounds(previousMonth);
       const { data: openingData, error: openingError } = await supabase
         .from("opening_inventory")
         .select("inventory_id, opening_date, opening_qty")
+        .gte("opening_date", previousStart)
+        .lte("opening_date", end)
         .order("opening_date", { ascending: true });
 
       if (openingError) throw openingError;
 
       const { data: movements, error: movementsError } = await supabase
         .from("daily_inventory_movements")
-        .select("*")
+        .select("inventory_id, movement_date, opening_qty, purchase_qty, add_stock_qty, sale_usage_qty, internal_usage_qty, closing_qty")
+        .gte("movement_date", previousStart)
+        .lte("movement_date", end)
         .order("movement_date", { ascending: true });
 
       if (movementsError) throw movementsError;
 
       const monthlyOpeningData = await ensureMonthlyOpeningRecords(openingData || [], movements || []);
-      const { start, end } = getMonthBounds(selectedMovementMonth);
 
       const movementsMap = {};
       const totalsMap = {};
