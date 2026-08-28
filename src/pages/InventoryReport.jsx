@@ -873,10 +873,14 @@ export default function InventoryReport() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-slate-500">Total Items</p>
               <p className="text-xl font-bold text-slate-800">{totalItems}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Total Qty</p>
+              <p className="text-xl font-bold text-blue-600">{totalQty}</p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Total Value</p>
