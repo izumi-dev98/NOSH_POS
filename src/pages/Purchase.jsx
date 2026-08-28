@@ -41,6 +41,8 @@ export default function Purchase({ setInventory }) {
   const [inventoryCategories, setInventoryCategories] = useState([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [completingPurchaseId, setCompletingPurchaseId] = useState(null);
+  const [processingPurchaseAction, setProcessingPurchaseAction] = useState(null);
 
   const user = JSON.parse(localStorage.getItem("user"));
   const canManage = user?.role === "superadmin" || user?.role === "admin";
@@ -512,6 +514,13 @@ export default function Purchase({ setInventory }) {
     });
 
     if (result.isConfirmed) {
+      setCompletingPurchaseId(purchase.id);
+      Swal.fire({
+        title: "Completing purchase...",
+        text: "Updating inventory, please wait.",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
       try {
         const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id);
 
@@ -567,6 +576,8 @@ export default function Purchase({ setInventory }) {
       } catch (err) {
         console.error("Error:", err);
         Swal.fire("Error", err.message || "Failed to complete purchase", "error");
+      } finally {
+        setCompletingPurchaseId(null);
       }
     }
   };
@@ -582,12 +593,21 @@ export default function Purchase({ setInventory }) {
     });
 
     if (result.isConfirmed) {
+      setProcessingPurchaseAction({ id: purchase.id, action: "cancel" });
+      Swal.fire({
+        title: "Cancelling purchase...",
+        text: "Please wait.",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
       try {
         await supabase.from("purchases").update({ status: "cancelled" }).eq("id", purchase.id);
         Swal.fire("Cancelled", "Purchase cancelled.", "success");
         fetchData();
       } catch (err) {
         Swal.fire("Error", err.message || "Failed to cancel", "error");
+      } finally {
+        setProcessingPurchaseAction(null);
       }
     }
   };
@@ -715,8 +735,12 @@ export default function Purchase({ setInventory }) {
                         {(purchase.status === "pending" || !purchase.status) && (
                           <>
                             <button onClick={() => openEditModal(purchase)} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">Edit</button>
-                            <button onClick={() => handleComplete(purchase)} className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700">Complete</button>
-                            <button onClick={() => handleCancel(purchase)} className="px-2 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700">Cancel</button>
+                            <button onClick={() => handleComplete(purchase)} disabled={completingPurchaseId === purchase.id} className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+                              {completingPurchaseId === purchase.id ? "Completing..." : "Complete"}
+                            </button>
+                            <button onClick={() => handleCancel(purchase)} disabled={processingPurchaseAction?.id === purchase.id} className="px-2 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60">
+                              {processingPurchaseAction?.id === purchase.id ? "Cancelling..." : "Cancel"}
+                            </button>
                           </>
                         )}
                         {purchase.status === "received" && (

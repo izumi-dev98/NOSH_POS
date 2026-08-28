@@ -23,6 +23,7 @@ export default function PurchaseReturn({ setInventory }) {
   const [showReturnItemsModal, setShowReturnItemsModal] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [editingReturnId, setEditingReturnId] = useState(null);
+  const [processingReturnAction, setProcessingReturnAction] = useState(null);
 
   // Pagination for saved returns
   const [currentPage, setCurrentPage] = useState(1);
@@ -196,6 +197,13 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
+    setProcessingReturnAction({ id: ret.id, action: "complete" });
+    Swal.fire({
+      title: "Completing return...",
+      text: "Updating inventory, please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       // Generate return number
       const { data: existingReturns } = await supabase
@@ -513,6 +521,8 @@ export default function PurchaseReturn({ setInventory }) {
     } catch (err) {
       console.error("Error:", err);
       Swal.fire("Error", err.message || "Failed to process return", "error");
+    } finally {
+      setProcessingReturnAction(null);
     }
   };
 
@@ -540,6 +550,13 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
+    setProcessingReturnAction({ id: ret.id, action: "cancel" });
+    Swal.fire({
+      title: "Cancelling return...",
+      text: "Restoring inventory, please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       const purchaseIds = [...new Set(itemsToReturn.map(i => i.purchase_id))];
       const fifoConsumptionRecords = [];
@@ -803,6 +820,8 @@ export default function PurchaseReturn({ setInventory }) {
     } catch (err) {
       console.error("Error:", err);
       Swal.fire("Error", err.message || "Failed to cancel return", "error");
+    } finally {
+      setProcessingReturnAction(null);
     }
   };
 
@@ -896,10 +915,11 @@ export default function PurchaseReturn({ setInventory }) {
                       {!isCompleted && !isCancelled && (
                         <button
                           onClick={() => handleCompleteReturn(ret)}
-                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                          disabled={processingReturnAction?.id === ret.id}
+                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                           title="Complete return - reduce inventory"
                         >
-                          Complete
+                          {processingReturnAction?.id === ret.id && processingReturnAction.action === "complete" ? "Completing..." : "Complete"}
                         </button>
                       )}
                       <button
@@ -911,9 +931,10 @@ export default function PurchaseReturn({ setInventory }) {
                       {!isCompleted && !isCancelled && (
                         <button
                           onClick={() => handleCancelReturn(ret)}
-                          className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700"
+                          disabled={processingReturnAction?.id === ret.id}
+                          className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Cancel
+                          {processingReturnAction?.id === ret.id && processingReturnAction.action === "cancel" ? "Cancelling..." : "Cancel"}
                         </button>
                       )}
                     </div>

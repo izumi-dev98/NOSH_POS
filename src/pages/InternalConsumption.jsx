@@ -1010,88 +1010,21 @@ export default function InternalConsumption({ inventory, setInventory }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Items *
                 </label>
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={itemSearch}
+                <select
+                  value=""
                   onChange={(e) => {
-                    setItemSearch(e.target.value);
-                    setUsageItemPage(1);
+                    const item = inventory.find((entry) => entry.id === Number(e.target.value));
+                    if (item) toggleItemSelection(item);
                   }}
-                  className="w-full px-3 py-2 border rounded-xl mb-2"
-                />
-                {(() => {
-                  const filteredItems = inventory.filter(item =>
-                    item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
-                  );
-                  const totalUsageItemPages = Math.max(1, Math.ceil(filteredItems.length / modalItemsPerPage));
-                  const usageStart = (usageItemPage - 1) * modalItemsPerPage;
-                  const usageItemsPageData = filteredItems.slice(
-                    usageStart,
-                    usageStart + modalItemsPerPage,
-                  );
-
-                  return (
-                    <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
-                  {usageItemsPageData.map((item) => {
-                    const isSelected = selectedItems.some(
-                      (s) => s.id === item.id,
-                    );
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => toggleItemSelection(item)}
-                        className={`p-3 rounded-xl border cursor-pointer transition ${
-                          isSelected
-                            ? "bg-blue-50 border-blue-500 dark:bg-blue-900/30 dark:border-blue-400"
-                            : "hover:bg-gray-50 dark:hover:bg-slate-700/60"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{item.item_name}</p>
-                            <p className="text-sm text-gray-500">
-                              Available: {item.qty} {item.unit}
-                            </p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="w-5 h-5"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {filteredItems.length > modalItemsPerPage && (
-                  <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
-                    <span>Page {usageItemPage} of {totalUsageItemPages}</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setUsageItemPage((p) => Math.max(1, p - 1))}
-                        disabled={usageItemPage === 1}
-                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                      >
-                        Prev
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setUsageItemPage((p) => Math.min(totalUsageItemPages, p + 1))}
-                        disabled={usageItemPage === totalUsageItemPages}
-                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-                    </>
-                  );
-                })()}
+                  className="w-full px-3 py-2 border rounded-xl"
+                >
+                  <option value="">Select item</option>
+                  {inventory.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.item_name} - Available: {item.qty} {item.unit}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Usage Quantities */}
@@ -1220,88 +1153,21 @@ export default function InternalConsumption({ inventory, setInventory }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Items *
                 </label>
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={itemSearch}
+                <select
+                  value=""
                   onChange={(e) => {
-                    setItemSearch(e.target.value);
-                    setAddItemPage(1);
+                    const item = inventory.find((entry) => entry.id === Number(e.target.value));
+                    if (item) toggleAddItemSelection(item);
                   }}
-                  className="w-full px-3 py-2 border rounded-xl mb-2"
-                />
-                {(() => {
-                  const filteredItems = inventory.filter(item =>
-                    item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
-                  );
-                  const totalAddItemPages = Math.max(1, Math.ceil(filteredItems.length / modalItemsPerPage));
-                  const addStart = (addItemPage - 1) * modalItemsPerPage;
-                  const addItemsPageData = filteredItems.slice(
-                    addStart,
-                    addStart + modalItemsPerPage,
-                  );
-
-                  return (
-                    <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
-                  {addItemsPageData.map((item) => {
-                    const isSelected = selectedAddItems.some(
-                      (s) => s.id === item.id,
-                    );
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => toggleAddItemSelection(item)}
-                        className={`p-3 rounded-xl border cursor-pointer transition ${
-                          isSelected
-                            ? "bg-green-50 border-green-500 dark:bg-emerald-900/30 dark:border-emerald-400"
-                            : "hover:bg-gray-50 dark:hover:bg-slate-700/60"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{item.item_name}</p>
-                            <p className="text-sm text-gray-500">
-                              Current Stock: {item.qty} {item.type}
-                            </p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="w-5 h-5"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {filteredItems.length > modalItemsPerPage && (
-                  <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
-                    <span>Page {addItemPage} of {totalAddItemPages}</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAddItemPage((p) => Math.max(1, p - 1))}
-                        disabled={addItemPage === 1}
-                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                      >
-                        Prev
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAddItemPage((p) => Math.min(totalAddItemPages, p + 1))}
-                        disabled={addItemPage === totalAddItemPages}
-                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-                    </>
-                  );
-                })()}
+                  className="w-full px-3 py-2 border rounded-xl"
+                >
+                  <option value="">Select item</option>
+                  {inventory.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.item_name} - Current Stock: {item.qty} {item.type}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Add Quantities */}

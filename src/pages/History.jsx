@@ -34,6 +34,7 @@ export default function History({ setInventory }) {
 
   const [editOrder, setEditOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [processingOrderAction, setProcessingOrderAction] = useState(null);
   const [editForm, setEditForm] = useState({
     payment_type: "",
     status: "",
@@ -525,6 +526,13 @@ export default function History({ setInventory }) {
     if (!canComplete) {
       return Swal.fire("Not allowed", "You do not have permission to complete orders", "error");
     }
+    setProcessingOrderAction({ id: order.id, action: "complete" });
+    Swal.fire({
+      title: "Completing order...",
+      text: "Updating inventory, please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       const { data: inventoryData, error: inventoryErr } = await supabase
         .from("inventory")
@@ -770,6 +778,8 @@ export default function History({ setInventory }) {
       fetchHistory();
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to complete order", "error");
+    } finally {
+      setProcessingOrderAction(null);
     }
   };
 
@@ -926,6 +936,13 @@ export default function History({ setInventory }) {
 
     const note = result.value ? inputOptions[result.value] : "";
 
+    setProcessingOrderAction({ id: order.id, action: "cancel" });
+    Swal.fire({
+      title: "Cancelling order...",
+      text: "Please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       // Try to set a cancel_note, cancelled_by and cancelled_at columns if they exist; also update status.
       const payload = {
@@ -958,6 +975,8 @@ export default function History({ setInventory }) {
       fetchHistory();
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to cancel order", "error");
+    } finally {
+      setProcessingOrderAction(null);
     }
   };
 
@@ -1246,17 +1265,19 @@ export default function History({ setInventory }) {
                         {canComplete && (
                           <button
                             onClick={() => handleComplete(order)}
-                            className="flex-1 bg-green-600 text-white px-3 py-2 rounded-xl hover:bg-green-700 transition"
+                            disabled={processingOrderAction?.id === order.id}
+                            className="flex-1 bg-green-600 text-white px-3 py-2 rounded-xl hover:bg-green-700 transition disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Complete
+                            {processingOrderAction?.id === order.id && processingOrderAction.action === "complete" ? "Completing..." : "Complete"}
                           </button>
                         )}
                         {canCancel && (
                           <button
                             onClick={() => handleCancel(order)}
-                            className="flex-1 bg-red-500 text-white px-3 py-2 rounded-xl hover:bg-red-600 transition"
+                            disabled={processingOrderAction?.id === order.id}
+                            className="flex-1 bg-red-500 text-white px-3 py-2 rounded-xl hover:bg-red-600 transition disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Cancel
+                            {processingOrderAction?.id === order.id && processingOrderAction.action === "cancel" ? "Cancelling..." : "Cancel"}
                           </button>
                         )}
                       </>
