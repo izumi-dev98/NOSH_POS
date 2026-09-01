@@ -50,6 +50,33 @@ export default function Inventory({
     return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
   };
 
+  const formatDateOnly = (value) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toISOString().split("T")[0];
+  };
+
+  const getExpiryBadgeClass = (value) => {
+    if (!value) return "bg-slate-100 text-slate-500";
+
+    const expiryDate = new Date(value);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiryDate.setHours(0, 0, 0, 0);
+
+    if (expiryDate < today) {
+      return "bg-red-100 text-red-700";
+    }
+
+    const diffDays = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 30) {
+      return "bg-amber-100 text-amber-700";
+    }
+
+    return "bg-emerald-100 text-emerald-700";
+  };
+
   const [formData, setFormData] = useState({
     item_name: "",
     qty: "",
@@ -146,10 +173,48 @@ export default function Inventory({
     return new Date(Date.UTC(year, monthNumber - 2, 1)).toISOString().slice(0, 7);
   };
 
+  const getEffectiveMonthOpening = (item, openingRecords, movements, month) => {
+    const { start } = getMonthBounds(month);
+    const recordsForItem = (openingRecords || []).filter((record) => record.inventory_id === item.id);
+    const previousMovement = (movements || [])
+      .filter((movement) => movement.inventory_id === item.id && movement.movement_date < start)
+      .sort((a, b) => a.movement_date.localeCompare(b.movement_date))
+      .at(-1);
+
+    const previousOpening = recordsForItem
+      .filter((record) => record.opening_date < start)
+      .sort((a, b) => a.opening_date.localeCompare(b.opening_date))
+      .at(-1);
+
+    const fallbackQty = Number(
+      previousMovement && previousMovement.closing_qty !== undefined && previousMovement.closing_qty !== null
+        ? previousMovement.closing_qty
+        : previousOpening && previousOpening.opening_qty !== undefined && previousOpening.opening_qty !== null
+          ? previousOpening.opening_qty
+          : item.qty || 0
+    );
+
+    const thisMonthRecord = recordsForItem
+      .filter((record) => record.opening_date.startsWith(`${month}-`))
+      .sort((a, b) => a.opening_date.localeCompare(b.opening_date))[0];
+
+    const currentMonthQty = Number(thisMonthRecord?.opening_qty ?? 0);
+
+    if (thisMonthRecord && currentMonthQty > 0) {
+      return {
+        opening_date: thisMonthRecord.opening_date,
+        opening_qty: currentMonthQty
+      };
+    }
+
+    return {
+      opening_date: start,
+      opening_qty: fallbackQty
+    };
+  };
+
   const ensureMonthlyOpeningRecords = async (openingRecords, movements) => {
     const { start } = getMonthBounds(selectedMovementMonth);
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    if (selectedMovementMonth < currentMonth) return openingRecords;
     const monthRecords = openingRecords.filter((record) => record.opening_date.startsWith(`${selectedMovementMonth}-`));
     const existingByInventoryId = new Map(
       monthRecords
@@ -230,13 +295,16 @@ export default function Inventory({
       const movementsMap = {};
       const totalsMap = {};
       const monthlyOpenings = {};
-      monthlyOpeningData.forEach((record) => {
-        if (record.opening_date.startsWith(`${selectedMovementMonth}-`)) {
-          const current = monthlyOpenings[record.inventory_id];
-          if (!current || record.opening_date < current.opening_date) {
-            monthlyOpenings[record.inventory_id] = record;
-          }
-        }
+      const datesMap = {};
+
+      inventory.forEach((item) => {
+        const effectiveOpening = getEffectiveMonthOpening(item, monthlyOpeningData, movements || [], selectedMovementMonth);
+        monthlyOpenings[item.id] = {
+          inventory_id: item.id,
+          opening_date: effectiveOpening.opening_date,
+          opening_qty: effectiveOpening.opening_qty
+        };
+        datesMap[item.id] = effectiveOpening.opening_date;
       });
 
       movements
@@ -275,14 +343,6 @@ export default function Inventory({
 
       setDailyMovementsMap(movementsMap);
       setMovementTotalsMap(totalsMap);
-
-      const datesMap = {};
-      monthlyOpeningData.forEach((record) => {
-        if (record.opening_date.startsWith(`${selectedMovementMonth}-`)) {
-          const current = datesMap[record.inventory_id];
-          if (!current || record.opening_date < current) datesMap[record.inventory_id] = record.opening_date;
-        }
-      });
       setOpeningDatesMap(datesMap);
     } catch (err) {
       console.error("Error fetching opening dates and movements:", err);
@@ -929,9 +989,9 @@ export default function Inventory({
       </div>
 
       {/* Table card */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-hidden">
+          <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
             <thead className="bg-slate-100">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">No</th>
@@ -945,14 +1005,15 @@ export default function Inventory({
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Opening Date</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Expiry Date</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-white">
               {paginatedInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="13" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="14" className="px-4 py-8 text-center text-slate-500">
                     No inventory found
                   </td>
                 </tr>
@@ -975,9 +1036,9 @@ export default function Inventory({
                   };
 
                   return (
-                    <tr key={item.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
-                      <td className="px-4 py-3 text-slate-500 text-xs">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800 text-sm">
+                    <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 text-slate-500 text-xs align-middle">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800 text-sm align-middle">
                         <button
                           type="button"
                           onClick={() => viewPurchaseHistory(item)}
@@ -987,60 +1048,69 @@ export default function Inventory({
                           {item.item_name}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs">{item.type}</td>
-                      <td className="px-4 py-3 text-center text-slate-600 text-xs">
+                      <td className="px-4 py-3 text-slate-600 text-xs align-middle">{item.type}</td>
+                      <td className="px-4 py-3 text-center text-slate-600 text-xs align-middle">
                         {(() => {
                           const key = item.item_name?.toLowerCase().trim();
                           const latestPrice = latestPrices[key];
                           return latestPrice !== undefined && latestPrice !== null ? formatMMK(latestPrice) : "-";
                         })()}
                       </td>
-                      <td className="px-4 py-3 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className="font-medium text-blue-600">{Number(movement.opening_qty || 0)}</span>
                       </td>
-                      <td className="px-4 py-3 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className={`font-medium ${Number(movement.purchase_qty || 0) > 0 ? "text-emerald-600" : "text-slate-400"}`}>
                           {Number(movement.purchase_qty || 0) > 0 ? `+${Number(movement.purchase_qty)}` : "0"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className={`font-medium ${Number(movement.add_stock_qty || 0) > 0 ? "text-emerald-600" : "text-slate-400"}`}>
                           {Number(movement.add_stock_qty || 0) > 0 ? `+${Number(movement.add_stock_qty)}` : "0"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className={`font-medium ${Number(movementTotals.sale_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
                           {Number(movementTotals.sale_usage_qty || 0) > 0 ? `-${Number(movementTotals.sale_usage_qty)}` : "0"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className={`font-medium ${Number(movementTotals.internal_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
                           {Number(movementTotals.internal_usage_qty || 0) > 0 ? `-${Number(movementTotals.internal_usage_qty)}` : "0"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center font-bold text-xs">
-                        <span className={`px-2 py-1 rounded font-semibold ${Number(movement.closing_qty || 0) > 2 ? " text-green-600" : " text-red-700"}`}>
+                      <td className="px-4 py-3 text-center font-bold text-xs align-middle">
+                        <span className={`px-2 py-1 rounded font-semibold ${Number(movement.closing_qty || 0) > 2 ? "text-green-600 bg-green-50" : "text-red-700 bg-red-50"}`}>
                           {Number(movement.closing_qty || 0)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-medium text-xs">
+                      <td className="px-4 py-3 font-medium text-xs align-middle">
                         {openingDatesMap[item.id] ? (
-                          <span className="px-2 py-1  text-green-600 rounded-full">{openingDatesMap[item.id]}</span>
+                          <span className="px-2 py-1 text-green-600 bg-green-50 rounded-full">{openingDatesMap[item.id]}</span>
                         ) : (
                           <span className="text-slate-400">Not Set</span>
                         )}
                       </td>
-                      <td className="px-2 py-3 text-xs">
-                        <span className="px-2 py-1  text-violet-700 rounded-full font-medium">
+                      <td className="px-4 py-3 align-middle">
+                        {item.expiry_date ? (
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-medium ${getExpiryBadgeClass(item.expiry_date)}`}>
+                            {formatDateOnly(item.expiry_date)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">No expiry</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 text-xs align-middle">
+                        <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full font-medium">
                           {getCategoryName(item.category_id)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center align-middle">
                         <div className="flex justify-center gap-1 flex-wrap">
                           {(canEditInventory || canEditInventoryCategory) && (
                             <button
                               onClick={() => openEditModal(item)}
-                              className="px-2 py-1 text-xs bg-indigo-600 text-gray-300 rounded hover:bg-indigo-700"
+                              className="px-2.5 py-1.5 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition"
                             >
                               Edit
                             </button>
@@ -1048,7 +1118,7 @@ export default function Inventory({
                           {canDeleteInventory && (
                             <button
                               onClick={() => deleteInventoryItem(item.id)}
-                              className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700"
+                              className="px-2.5 py-1.5 text-xs bg-rose-600 text-white rounded-md hover:bg-rose-700 shadow-sm transition"
                             >
                               Delete
                             </button>
