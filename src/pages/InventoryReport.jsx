@@ -3,6 +3,7 @@ import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
 import { calculateFifoValue } from "../utils/fifoService";
+import { getEffectiveMonthOpening, getMonthBounds, getPreviousMonth } from "../utils/inventoryOpening";
 
 export default function InventoryReport() {
   const [inventory, setInventory] = useState([]);
@@ -36,7 +37,8 @@ export default function InventoryReport() {
   // Opening and movement data for the inventory report
   const [openingDatesMap, setOpeningDatesMap] = useState({});
   const [dailyMovementsMap, setDailyMovementsMap] = useState({});
-  const [selectedMovementMonth, setSelectedMovementMonth] = useState(new Date().toISOString().slice(0, 7));
+  const currentMovementMonth = new Date().toISOString().slice(0, 7);
+  const [selectedMovementMonth, setSelectedMovementMonth] = useState(currentMovementMonth);
 
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
     style: "currency",
@@ -113,9 +115,9 @@ export default function InventoryReport() {
 
   const fetchInventory = async () => {
     setLoading(true);
-    const [selectedYear, selectedMonth] = selectedMovementMonth.split("-").map(Number);
-    const monthStart = `${selectedMovementMonth}-01`;
-    const monthEnd = new Date(Date.UTC(selectedYear, selectedMonth, 0)).toISOString().split("T")[0];
+    const { start: monthStart, end: monthEnd } = getMonthBounds(selectedMovementMonth);
+    const previousMonth = getPreviousMonth(selectedMovementMonth);
+    const { start: previousStart } = getMonthBounds(previousMonth);
 
     // Get all received purchases with dates for FIFO ordering
     const { data: purchases } = await supabase
@@ -161,50 +163,52 @@ export default function InventoryReport() {
 
     const [{ data: openingData }, { data: movementsData }] = await Promise.all([
       supabase.from("opening_inventory").select("inventory_id, opening_date, opening_qty")
-        .gte("opening_date", monthStart).lte("opening_date", monthEnd),
+        .gte("opening_date", previousStart).lte("opening_date", monthEnd),
       supabase.from("daily_inventory_movements")
-        .select("inventory_id, movement_date, opening_qty, purchase_qty, add_stock_qty, sale_usage_qty, internal_usage_qty, closing_qty")
-        .gte("movement_date", monthStart).lte("movement_date", monthEnd)
+        .select("inventory_id, movement_date, opening_qty, purchase_qty, add_stock_qty, adjust_qty, sale_usage_qty, internal_usage_qty, closing_qty")
+        .gte("movement_date", previousStart).lte("movement_date", monthEnd)
         .order("movement_date", { ascending: true })
     ]);
 
     const datesMap = {};
-    (openingData || []).forEach((record) => {
-      if (!datesMap[record.inventory_id] || record.opening_date < datesMap[record.inventory_id]) {
-        datesMap[record.inventory_id] = record.opening_date;
-      }
-    });
-    setOpeningDatesMap(datesMap);
-
     const movementsMap = {};
-    (movementsData || []).forEach((movement) => {
-      const current = movementsMap[movement.inventory_id] || {
-        opening_qty: Number(openingData?.find((record) => record.inventory_id === movement.inventory_id)?.opening_qty || movement.opening_qty || 0),
-        purchase_qty: 0,
-        add_stock_qty: 0,
-        sale_usage_qty: 0,
-        internal_usage_qty: 0
-      };
-      current.purchase_qty += Number(movement.purchase_qty || 0);
-      current.add_stock_qty += Number(movement.add_stock_qty || 0);
-      current.sale_usage_qty += Number(movement.sale_usage_qty || 0);
-      current.internal_usage_qty += Number(movement.internal_usage_qty || 0);
-      current.closing_qty = Math.max(0, current.opening_qty + current.purchase_qty + current.add_stock_qty - current.sale_usage_qty - current.internal_usage_qty);
-      movementsMap[movement.inventory_id] = current;
-    });
     (invData.data || []).forEach((item) => {
-      if (!movementsMap[item.id]) {
-        const opening = openingData?.find((record) => record.inventory_id === item.id);
-        movementsMap[item.id] = {
-          opening_qty: Number(opening?.opening_qty || 0),
+      const effectiveOpening = getEffectiveMonthOpening(item, openingData || [], movementsData || [], selectedMovementMonth);
+      const openingQty = Number(effectiveOpening.opening_qty || 0);
+      datesMap[item.id] = effectiveOpening.opening_date;
+
+      const totals = (movementsData || [])
+        .filter((movement) => (
+          movement.inventory_id === item.id
+          && movement.movement_date >= monthStart
+          && movement.movement_date <= monthEnd
+        ))
+        .reduce((current, movement) => {
+          current.purchase_qty += Number(movement.purchase_qty || 0);
+          current.add_stock_qty += Number(movement.add_stock_qty || 0);
+          current.adjust_qty += Number(movement.adjust_qty || 0);
+          current.sale_usage_qty += Number(movement.sale_usage_qty || 0);
+          current.internal_usage_qty += Number(movement.internal_usage_qty || 0);
+          return current;
+        }, {
           purchase_qty: 0,
           add_stock_qty: 0,
+          adjust_qty: 0,
           sale_usage_qty: 0,
-          internal_usage_qty: 0,
-          closing_qty: Number(opening?.opening_qty || 0)
-        };
-      }
+          internal_usage_qty: 0
+        });
+
+      movementsMap[item.id] = {
+        opening_qty: openingQty,
+        ...totals,
+        closing_qty: Math.max(
+          0,
+          openingQty + totals.purchase_qty + totals.add_stock_qty - totals.sale_usage_qty - totals.internal_usage_qty
+          + totals.adjust_qty
+        )
+      };
     });
+    setOpeningDatesMap(datesMap);
     setDailyMovementsMap(movementsMap);
 
     // Build FIFO price history per item based on REMAINING layers
@@ -762,6 +766,7 @@ export default function InventoryReport() {
             <input
               type="month"
               value={selectedMovementMonth}
+                max={currentMovementMonth}
               onChange={(e) => {
                 setSelectedMovementMonth(e.target.value);
                 setCurrentPage(1);

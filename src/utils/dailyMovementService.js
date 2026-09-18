@@ -41,9 +41,9 @@ export const upsertDailyMovement = async ({
   if (fetchError) throw fetchError;
 
   const effectiveOpeningQty = Number(
-    existing?.opening_qty
-      ?? latestPriorMovement?.closing_qty
+    latestPriorMovement?.closing_qty
       ?? openingRecord?.opening_qty
+      ?? existing?.opening_qty
       ?? 0
   );
 
