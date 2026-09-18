@@ -6,6 +6,7 @@ import { ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
 import mainLogo from "../assets/Main logo.jpg";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSun, faMoon } from "@fortawesome/free-solid-svg-icons";
+import { logActivity } from "../utils/activityLogService";
 
 export default function Login({ setUser }) {
     const [username, setUsername] = useState("");
@@ -81,6 +82,13 @@ export default function Login({ setUser }) {
             const loginUser = { ...data, permissions };
             localStorage.setItem("user", JSON.stringify(loginUser));
             if (setUser) setUser(loginUser);
+            void logActivity({
+                module: "Authentication",
+                action: "LOGIN",
+                description: `User ${loginUser.username} logged in`,
+                entityType: "user",
+                entityId: loginUser.id,
+            });
 
             Swal.fire("Success", "Logged in!", "success").then(() => {
                 navigate("/dashboard");

@@ -46,6 +46,8 @@ export default function Sidebar({ isOpen }) {
           </NavLink>
         )}
 
+      
+
         {canAccess("menu") && (
           <NavLink to="/menu" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Menu
@@ -186,6 +188,12 @@ export default function Sidebar({ isOpen }) {
         {canAccess("user-right") && (
           <NavLink to="/user-right" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             User Right
+          </NavLink>
+        )}
+
+          {canAccess("activity-log") && (
+          <NavLink to="/activity-log" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
+            Activity Log
           </NavLink>
         )}
 

@@ -37,6 +37,7 @@ export default function InventoryReport() {
   // Opening and movement data for the inventory report
   const [openingDatesMap, setOpeningDatesMap] = useState({});
   const [dailyMovementsMap, setDailyMovementsMap] = useState({});
+  const [movementDatesMap, setMovementDatesMap] = useState({});
   const currentMovementMonth = new Date().toISOString().slice(0, 7);
   const [selectedMovementMonth, setSelectedMovementMonth] = useState(currentMovementMonth);
 
@@ -170,6 +171,11 @@ export default function InventoryReport() {
         .order("movement_date", { ascending: true })
     ]);
 
+    const { data: allMovementDates } = await supabase
+      .from("daily_inventory_movements")
+      .select("inventory_id, movement_date")
+      .order("movement_date", { ascending: true });
+
     const datesMap = {};
     const movementsMap = {};
     (invData.data || []).forEach((item) => {
@@ -210,6 +216,11 @@ export default function InventoryReport() {
     });
     setOpeningDatesMap(datesMap);
     setDailyMovementsMap(movementsMap);
+    setMovementDatesMap((allMovementDates || []).reduce((dates, movement) => {
+      if (!dates[movement.inventory_id]) dates[movement.inventory_id] = [];
+      dates[movement.inventory_id].push(movement.movement_date);
+      return dates;
+    }, {}));
 
     // Build FIFO price history per item based on REMAINING layers
     // purchase_items.qty already reflects remaining qty after consumption
@@ -370,6 +381,13 @@ export default function InventoryReport() {
         returnItemsData = returnItems;
       }
 
+      const { data: periodMovements } = await supabase
+        .from("daily_inventory_movements")
+        .select("inventory_id, movement_date, closing_qty")
+        .gte("movement_date", fromDate)
+        .lte("movement_date", toDate)
+        .order("movement_date", { ascending: true });
+
       // Initialize data structure for each inventory item
       const itemTransactions = {};
       allInventory.forEach(inv => {
@@ -382,8 +400,15 @@ export default function InventoryReport() {
           added_qty: 0,         // From add_stock
           reduced_qty: 0,       // From usage/consumption
           returned_qty: 0,      // From purchase returns
+          closing_qty: null,
           net_change: 0,
         };
+      });
+
+      (periodMovements || []).forEach((movement) => {
+        if (itemTransactions[movement.inventory_id]) {
+          itemTransactions[movement.inventory_id].closing_qty = Number(movement.closing_qty || 0);
+        }
       });
 
       // Fetch purchase_items (all purchases, not just received)
@@ -464,25 +489,18 @@ export default function InventoryReport() {
           added_qty: item.added_qty,
           reduced_qty: item.reduced_qty,
           returned_qty: item.returned_qty,
+          closing_qty: item.closing_qty,
           change_qty: netChange,
           change_percent: parseFloat(changePercent),
           unit_price: item.price || 0,
         };
       });
 
-      // Filter to only show items with transactions
-      const filteredComparison = comparison.filter(item =>
-        item.received_qty > 0 ||
-        item.added_qty > 0 ||
-        item.reduced_qty > 0 ||
-        item.returned_qty > 0
-      );
-
       // Sort by item name
-      filteredComparison.sort((a, b) => (a.item_name || '').localeCompare(b.item_name || ''));
+      comparison.sort((a, b) => (a.item_name || '').localeCompare(b.item_name || ''));
 
-      console.log('Daily transactions:', filteredComparison.length, 'items with activity');
-      setCompareData(filteredComparison);
+      console.log('Daily comparison:', comparison.length, 'inventory items');
+      setCompareData(comparison);
     } catch (err) {
       console.error('Error fetching compare data:', err);
       setCompareData([]);
@@ -496,45 +514,44 @@ export default function InventoryReport() {
   const filterByDate = (items) => {
     const now = new Date();
 
-    if (customStart && customEnd) {
-      const start = new Date(customStart);
-      const end = new Date(customEnd);
-      end.setHours(23, 59, 59, 999);
-      return items.filter((item) => {
-        const itemDate = item.created_at ? new Date(item.created_at) : null;
-        return itemDate && itemDate >= start && itemDate <= end;
+    const hasMovementInRange = (item, start, end) => {
+      const movementDates = movementDatesMap[item.id] || [];
+      return movementDates.some((movementDate) => {
+        const date = new Date(`${movementDate}T00:00:00`);
+        return date >= start && date <= end;
       });
+    };
+
+    if (customStart && customEnd) {
+      const start = new Date(`${customStart}T00:00:00`);
+      const end = new Date(`${customEnd}T23:59:59.999`);
+      end.setHours(23, 59, 59, 999);
+      return items.filter((item) => hasMovementInRange(item, start, end));
     }
 
     switch (dateFilter) {
       case "day":
-        return items.filter((item) => {
-          const itemDate = item.created_at ? new Date(item.created_at) : null;
-          return itemDate &&
-            itemDate.getDate() === now.getDate() &&
-            itemDate.getMonth() === now.getMonth() &&
-            itemDate.getFullYear() === now.getFullYear();
-        });
+        {
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const end = new Date(start);
+          end.setHours(23, 59, 59, 999);
+          return items.filter((item) => hasMovementInRange(item, start, end));
+        }
       case "week": {
         const weekAgo = new Date();
         weekAgo.setDate(now.getDate() - 7);
-        return items.filter((item) => {
-          const itemDate = item.created_at ? new Date(item.created_at) : null;
-          return itemDate && itemDate >= weekAgo;
-        });
+        return items.filter((item) => hasMovementInRange(item, weekAgo, now));
       }
       case "month":
-        return items.filter((item) => {
-          const itemDate = item.created_at ? new Date(item.created_at) : null;
-          return itemDate &&
-            itemDate.getMonth() === now.getMonth() &&
-            itemDate.getFullYear() === now.getFullYear();
-        });
+        {
+          const start = new Date(now.getFullYear(), now.getMonth(), 1);
+          return items.filter((item) => hasMovementInRange(item, start, now));
+        }
       case "year":
-        return items.filter((item) => {
-          const itemDate = item.created_at ? new Date(item.created_at) : null;
-          return itemDate && itemDate.getFullYear() === now.getFullYear();
-        });
+        {
+          const start = new Date(now.getFullYear(), 0, 1);
+          return items.filter((item) => hasMovementInRange(item, start, now));
+        }
       default:
         return items;
     }
@@ -591,6 +608,7 @@ export default function InventoryReport() {
         Added: item.added_qty,
         Reduced: item.reduced_qty,
         Returned: item.returned_qty,
+        "Closing Qty": item.closing_qty ?? "-",
         "Net Change": item.change_qty,
       }));
 
@@ -921,6 +939,7 @@ export default function InventoryReport() {
                     Returned
                     <span className="text-xs text-slate-500 font-normal block">(Return)</span>
                   </th>
+                  <th className="px-4 py-3 text-right font-semibold text-blue-700">Closing Qty</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Net Change</th>
                 </tr>
               </thead>
@@ -928,19 +947,19 @@ export default function InventoryReport() {
               <tbody>
                 {compareLoading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-6">
+                    <td colSpan="8" className="text-center py-6">
                       Loading daily transactions...
                     </td>
                   </tr>
                 ) : !compareFrom || !compareTo ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-6">
+                    <td colSpan="8" className="text-center py-6">
                       Select 'From' and 'To' dates to compare
                     </td>
                   </tr>
                 ) : filteredCompareData.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-6">
+                    <td colSpan="8" className="text-center py-6">
                       No transactions found in this period
                     </td>
                   </tr>
@@ -987,6 +1006,9 @@ export default function InventoryReport() {
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-blue-700">
+                          {item.closing_qty ?? "-"}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${netChangeBg}`}>

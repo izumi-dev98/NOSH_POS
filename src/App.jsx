@@ -7,12 +7,14 @@ import Navbar from "./components/Navbar";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Payments = lazy(() => import("./pages/Pyaments"));
 const History = lazy(() => import("./pages/History"));
+const ActivityLog = lazy(() => import("./pages/ActivityLog"));
 const Menu = lazy(() => import("./pages/Menu"));
 const Category = lazy(() => import("./pages/Category"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 
 import supabase from "./createClients";
 import { fetchExpiringSoonPurchaseItems, runExpiryCheck } from "./utils/expiryService";
+import { logActivity, logPrint } from "./utils/activityLogService";
 const InventoryReport = lazy(() => import("./pages/InventoryReport"));
 const TotalSalesReport = lazy(() => import("./pages/TotalSalesReport"));
 const InternalUsageAddStockReport = lazy(() => import("./pages/InternalUsageAddStockReport"));
@@ -91,6 +93,40 @@ export default function App() {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const handlePrintClick = (event) => {
+      const button = event.target.closest?.("button");
+      if (!button || window.location.pathname === "/activity-log") return;
+      const label = button.textContent?.replace(/\s+/g, " ").trim() || "Print";
+      const printMatch = label.match(/\bprint\b/i);
+      const processMatch = label.match(/\b(add|create|save|update|edit|delete|remove|complete|cancel|return|receive|approve|reject|export)\b/i);
+
+      if (!printMatch && !processMatch) return;
+
+      const module = window.location.pathname.split("/").filter(Boolean).join("/") || "Application";
+      if (printMatch) {
+        void logPrint({
+          module,
+          description: `Started print: ${label}`,
+          metadata: { path: window.location.pathname, button: label },
+        });
+        return;
+      }
+
+      void logActivity({
+        module,
+        action: processMatch[1].toUpperCase(),
+        description: `Started ${processMatch[1].toLowerCase()} process: ${label}`,
+        metadata: { path: window.location.pathname, button: label },
+      });
+    };
+
+    document.addEventListener("click", handlePrintClick, true);
+    return () => document.removeEventListener("click", handlePrintClick, true);
+  }, [user]);
 
   // ------------------- EXPIRY CHECK -------------------
   useEffect(() => {
@@ -250,6 +286,7 @@ export default function App() {
             <Route path="/dashboard" element={<PrivateRoute user={user} allowedFeatures={['dashboard']}><Dashboard /></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute user={user} allowedFeatures={['payments']}><Payments inventory={inventory} setInventory={setInventory} menu={menu} user={user} /></PrivateRoute>} />
             <Route path="/history" element={<PrivateRoute user={user} allowedFeatures={['history']}><History setInventory={setInventory} /></PrivateRoute>} />
+            <Route path="/activity-log" element={<PrivateRoute user={user} allowedFeatures={['activity-log']}><ActivityLog /></PrivateRoute>} />
             <Route path="/menu" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']} allowedFeatures={['menu']}><Menu menu={menu} inventory={inventory} addMenuItem={addMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem} /></PrivateRoute>} />
             <Route path="/category" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']} allowedFeatures={['category']}><Category /></PrivateRoute>} />
             <Route path="/inventory" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['inventory']}><Inventory inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} /></PrivateRoute>} />

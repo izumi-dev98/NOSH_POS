@@ -3,6 +3,7 @@ export const ROLE_ACCESS_RIGHTS = {
     "dashboard",
     "payments",
     "history",
+    "activity-log",
     "menu",
     "category",
     "inventory",
@@ -45,6 +46,7 @@ export const ROLE_ACCESS_RIGHTS = {
   admin: [
     "dashboard",
     "history",
+    "activity-log",
     "history-complete",
     "history-cancel",
     "inventory",
@@ -78,6 +80,7 @@ export const FUNCTION_OPTIONS = [
   { key: "dashboard", label: "Dashboard", group: "Navigation" },
   { key: "payments", label: "Payments", group: "Navigation" },
   { key: "history", label: "History", group: "Navigation" },
+  { key: "activity-log", label: "Activity Log", group: "Navigation" },
   { key: "menu", label: "Menu", group: "Navigation" },
   { key: "category", label: "Category", group: "Navigation" },
   { key: "inventory", label: "Inventory", group: "Navigation" },
