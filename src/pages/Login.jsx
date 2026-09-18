@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSun, faMoon, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { logActivity } from "../utils/activityLogService";
 import { hashPassword, verifyPassword } from "../utils/passwordService";
+import packageInfo from "../../package.json";
 
 export default function Login({ setUser }) {
     const [username, setUsername] = useState("");
@@ -213,6 +214,9 @@ export default function Login({ setUser }) {
 
                 <p className="text-center text-yellow-500 text-[10px] sm:text-xs mt-6 font-semibold">
                     © March 2026 Nosh
+                </p>
+                <p className="text-center text-slate-400 text-[10px] mt-1">
+                    Version v{packageInfo.version}
                 </p>
             </div>
         </div>

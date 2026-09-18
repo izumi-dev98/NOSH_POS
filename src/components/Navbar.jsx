@@ -7,7 +7,7 @@ import Swal from "sweetalert2";
 import { hashPassword, verifyPassword } from "../utils/passwordService";
 import { logActivity } from "../utils/activityLogService";
 
-export default function Navbar({ toggleSidebar, theme, toggleTheme, onUserUpdated }) {
+export default function Navbar({ toggleSidebar, theme, toggleTheme, onUserUpdated, maintenanceMode, onMaintenanceToggle }) {
   const [user, setUser] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "null");
@@ -92,6 +92,15 @@ export default function Navbar({ toggleSidebar, theme, toggleTheme, onUserUpdate
           <span className="hidden sm:inline text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 glass:bg-slate-800/70 glass:text-slate-100">
             {currentThemeLabel}
           </span>
+          {user.role === "superadmin" && (
+            <button
+              onClick={onMaintenanceToggle}
+              className={`hidden rounded-lg px-3 py-1.5 text-xs font-semibold sm:inline ${maintenanceMode ? "bg-amber-600 text-white" : "border border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-200"}`}
+              title="Toggle maintenance mode"
+            >
+              {maintenanceMode ? "Maintenance On" : "Maintenance Off"}
+            </button>
+          )}
           <button onClick={() => setShowProfile((value) => !value)} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Open user profile">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/60"><FontAwesomeIcon icon={faUser} className="text-indigo-600" /></span>
             <span className="hidden text-sm font-medium capitalize text-slate-700 sm:inline dark:text-slate-200 glass:text-slate-100">{user.username}</span>

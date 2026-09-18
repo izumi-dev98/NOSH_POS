@@ -49,7 +49,7 @@ export default function TotalSalesReport() {
       // Fetch orders for report, then filter completed/cancelled locally to avoid case mismatch issues
       const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
-        .select("*")
+        .select("id, created_at, status, payment_type, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, remark, discount_type, cancelled_by, completed_by, completed_at, cancelled_at, cancel_note")
         .order("created_at", { ascending: false })
         .range(0, 9999);
       if (ordersErr) throw ordersErr;
@@ -59,32 +59,22 @@ export default function TotalSalesReport() {
       // Fetch order items for selected orders in chunks (Supabase defaults to 100 rows)
       let items = [];
       if (orderIds.length > 0) {
-        const chunkSize = 100;
+        const chunkSize = 500;
+        const chunks = [];
         for (let i = 0; i < orderIds.length; i += chunkSize) {
-          const chunk = orderIds.slice(i, i + chunkSize).map((id) => Number(id));
+          chunks.push(orderIds.slice(i, i + chunkSize).map((id) => Number(id)));
+        }
+        const chunkResults = await Promise.all(chunks.map(async (chunk) => {
           const { data: chunkData, error: chunkErr } = await supabase
             .from("order_items")
-            .select("*")
+            .select("id, order_id, menu_id, menu_set_id, menu_name, qty, price, original_price")
             .in("order_id", chunk)
             .order("id", { ascending: true })
             .range(0, 9999);
           if (chunkErr) throw chunkErr;
-          items = items.concat(chunkData || []);
-        }
-      }
-
-      // Targeted debug: explicitly query order_items for slip 1296 if not present
-      try {
-        const has1296 = (items || []).some(it => Number(it.order_id) === 1296);
-        if (!has1296) {
-          const { data: single1296, error: singleErr } = await supabase
-            .from('order_items')
-            .select('*')
-            .eq('order_id', 1296);
-          console.log('TotalSalesReport: direct fetch for order_items where order_id=1296', { rows: (single1296 || []).length, error: singleErr, sample: (single1296 || []).slice(0,5) });
-        }
-      } catch (err) {
-        console.error('TotalSalesReport: direct fetch 1296 failed', err);
+          return chunkData || [];
+        }));
+        items = chunkResults.flat();
       }
 
       const { data: menuData, error: menuErr } = await supabase.from("menu").select("id, menu_name").range(0, 9999);

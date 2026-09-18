@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { hasFeature } from "../utils/accessControl";
+import packageInfo from "../../package.json";
 
 export default function Sidebar({ isOpen }) {
   const [reportOpen, setReportOpen] = useState(false);
@@ -200,6 +201,10 @@ export default function Sidebar({ isOpen }) {
         <NavLink to="/logout" className={`${baseLink} text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/30 glass:text-rose-700 glass:hover:bg-white/45`}>
           Logout
         </NavLink>
+
+        <div className="px-4 pt-3 text-[11px] text-slate-400 dark:text-slate-500">
+          Version v{packageInfo.version}
+        </div>
 
       </nav>
     </aside>

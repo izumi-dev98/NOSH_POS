@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Payments = lazy(() => import("./pages/Pyaments"));
 const History = lazy(() => import("./pages/History"));
 const ActivityLog = lazy(() => import("./pages/ActivityLog"));
+const Maintenance = lazy(() => import("./pages/Maintenance"));
 const Menu = lazy(() => import("./pages/Menu"));
 const Category = lazy(() => import("./pages/Category"));
 const Inventory = lazy(() => import("./pages/Inventory"));
@@ -55,6 +56,7 @@ export default function App() {
     return getStoredUser();
   });
   const [loading, setLoading] = useState(true);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
@@ -74,8 +76,44 @@ export default function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (!user) return undefined;
+
+    let cancelled = false;
+    const fetchMaintenanceMode = async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("maintenance_enabled")
+        .eq("setting_key", "maintenance_mode")
+        .maybeSingle();
+      if (!cancelled && !error) setMaintenanceMode(Boolean(data?.maintenance_enabled));
+    };
+    void fetchMaintenanceMode();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const toggleMaintenanceMode = async () => {
+    const nextValue = !maintenanceMode;
+    const { error } = await supabase
+      .from("app_settings")
+      .update({ maintenance_enabled: nextValue, updated_by: user?.id, updated_at: new Date().toISOString() })
+      .eq("setting_key", "maintenance_mode");
+    if (error) {
+      Swal.fire("Error", error.message, "error");
+      return;
+    }
+    setMaintenanceMode(nextValue);
+    void logActivity({
+      module: "System",
+      action: "MAINTENANCE_MODE",
+      description: `${nextValue ? "Enabled" : "Disabled"} maintenance mode`,
+      metadata: { enabled: nextValue },
+    });
+  };
+
   const toggleSidebar = () => setIsOpen((prev) => !prev);
   const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  const maintenanceRestricted = Boolean(user && maintenanceMode && user.role !== "superadmin");
 
   // ------------------- AUTH STATE -------------------
   useEffect(() => {
@@ -261,12 +299,12 @@ export default function App() {
   // ------------------- RENDER -------------------
   return (
     <div className="flex">
-      {user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
-      <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${user && isOpen ? "ml-60" : "ml-0"}`}>
-        {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} onUserUpdated={setUser} />}
+      {!maintenanceRestricted && user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
+      <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${!maintenanceRestricted && user && isOpen ? "ml-60" : "ml-0"}`}>
+        {!maintenanceRestricted && user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} onUserUpdated={setUser} maintenanceMode={maintenanceMode} onMaintenanceToggle={toggleMaintenanceMode} />}
         <main className={`p-6 ${user ? "pt-16" : ""}`}>
           <Suspense fallback={<div className="flex justify-center items-center min-h-[240px] text-slate-600 dark:text-slate-300">Loading page...</div>}>
-            <Routes>
+            {maintenanceRestricted ? <Maintenance onLogout={() => setUser(null)} /> : <Routes>
             {/* Login redirects to dashboard if already logged in */}
             <Route
               path="/"
@@ -311,7 +349,7 @@ export default function App() {
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />
-            </Routes>
+            </Routes>}
           </Suspense>
         </main>
       </div>

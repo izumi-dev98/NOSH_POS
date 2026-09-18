@@ -24,8 +24,8 @@ export default function TopSellingMenuReport() {
     setLoading(true);
     try {
       const [{ data: ordersData }, { data: itemsData }, { data: menusData }] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }).range(0, 9999),
-        supabase.from("order_items").select("*").range(0, 9999),
+        supabase.from("orders").select("id, created_at, status").order("created_at", { ascending: false }).range(0, 9999),
+        supabase.from("order_items").select("id, order_id, menu_id, menu_set_id, menu_name, qty, price").range(0, 9999),
         supabase.from("menu").select("id, menu_name").range(0, 9999),
       ]);
       setOrders(ordersData || []);

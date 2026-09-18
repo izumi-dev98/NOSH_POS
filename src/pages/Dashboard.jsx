@@ -73,7 +73,6 @@ export default function Dashboard() {
 
       const [
         { data: orders, error: ordersErr },
-        { data: orderItems, error: itemsErr },
         { data: menuData, error: menuErr },
         { data: menuSetsData, error: menuSetsErr },
         { data: inventoryData, error: inventoryErr },
@@ -86,7 +85,6 @@ export default function Dashboard() {
           .eq("status", "completed")
           .gte("created_at", startOfMonth)
           .lte("created_at", endOfMonth),
-        supabase.from("order_items").select("*"),
         supabase.from("menu").select("id, menu_name"),
         supabase.from("menu_sets").select("id, set_name"),
         supabase.from("inventory").select("id, item_name, qty").order("qty", { ascending: false }),
@@ -100,19 +98,24 @@ export default function Dashboard() {
       ]);
 
       if (ordersErr) throw ordersErr;
-      if (itemsErr) throw itemsErr;
       if (menuErr) throw menuErr;
       if (menuSetsErr) throw menuSetsErr;
       if (inventoryErr) throw inventoryErr;
       if (suppliersErr) throw suppliersErr;
       if (purchasesErr) throw purchasesErr;
 
+      const completedOrderIds = (orders || []).map((order) => order.id);
+      const { data: orderItems, error: itemsErr } = completedOrderIds.length > 0
+        ? await supabase.from("order_items").select("*").in("order_id", completedOrderIds)
+        : { data: [], error: null };
+      if (itemsErr) throw itemsErr;
+
       const menuNameById = new Map((menuData || []).map((m) => [m.id, m.menu_name]));
       const setNameById = new Map((menuSetsData || []).map((s) => [s.id, s.set_name]));
-      const completedOrderIds = new Set((orders || []).map((o) => o.id));
+      const completedOrderIdSet = new Set(completedOrderIds);
 
       const monthItems = (orderItems || [])
-        .filter((i) => completedOrderIds.has(i.order_id))
+        .filter((i) => completedOrderIdSet.has(i.order_id))
         .map((i) => {
           if (i.menu_set_id) {
             return {
