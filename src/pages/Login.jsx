@@ -4,13 +4,16 @@ import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
 import mainLogo from "../assets/Main logo.jpg";
+import restaurantBackground from "../assets/restaurant-dark-simple.jpg";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSun, faMoon } from "@fortawesome/free-solid-svg-icons";
+import { faSun, faMoon, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { logActivity } from "../utils/activityLogService";
+import { hashPassword, verifyPassword } from "../utils/passwordService";
 
 export default function Login({ setUser }) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [theme, setTheme] = useState(() => {
         const savedTheme = localStorage.getItem("theme");
         if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
@@ -58,7 +61,20 @@ export default function Login({ setUser }) {
                 .single();
 
             if (error || !data) return Swal.fire("Error", "User not found", "error");
-            if (data.password !== password) return Swal.fire("Error", "Wrong password", "error");
+            const validPassword = data.password_hash
+                ? await verifyPassword(password, data.password_hash)
+                : data.password === password;
+            if (!validPassword) return Swal.fire("Error", "Wrong password", "error");
+
+            if (!data.password_hash) {
+                const passwordHash = await hashPassword(password);
+                await supabase
+                    .from("user")
+                    .update({ password_hash: passwordHash, password: null })
+                    .eq("id", data.id);
+                data.password_hash = passwordHash;
+            }
+            data.password = null;
 
             let permissions = ROLE_ACCESS_RIGHTS[data.role] || [];
             if (data.role !== "superadmin") {
@@ -115,7 +131,14 @@ export default function Login({ setUser }) {
         : "bg-white border-gray-300 text-gray-800 placeholder-gray-400";
 
     return (
-        <div className={`fixed inset-0 overflow-hidden flex items-center justify-center px-4 transition-colors duration-300 ${bgGradient}`}>
+        <div
+            className={`fixed inset-0 overflow-hidden flex items-center justify-center px-4 transition-colors duration-300 ${bgGradient}`}
+            style={{
+                backgroundImage: `linear-gradient(rgba(15, 23, 42, ${isDarkMode ? "0.62" : "0.42"}), rgba(15, 23, 42, ${isDarkMode ? "0.78" : "0.55"})), url("${restaurantBackground}")`,
+                backgroundPosition: "center",
+                backgroundSize: "cover",
+            }}
+        >
             <button
                 onClick={toggleTheme}
                 className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
@@ -166,13 +189,18 @@ export default function Login({ setUser }) {
                         <label className={`text-xs sm:text-sm transition-colors duration-300 ${labelClasses}`}>
                             Password
                         </label>
-                        <input
-                            type="password"
-                            placeholder="Enter password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className={`mt-1 w-full px-3 sm:px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-300 ${inputClasses}`}
-                        />
+                        <div className="relative mt-1">
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Enter password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className={`w-full px-3 sm:px-4 pr-11 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-300 ${inputClasses}`}
+                            />
+                            <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-600" aria-label={showPassword ? "Hide password" : "Show password"}>
+                                <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
+                            </button>
+                        </div>
                     </div>
 
                     <button

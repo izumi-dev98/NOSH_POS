@@ -1,200 +1,169 @@
-> ### **Copyright Notice & Proprietary License**
-> 
-> Copyright (c) **2026** Nosh   
-> **All rights reserved.**
-> 
-> Unauthorized copying of this file, via any medium, is strictly prohibited.  
-> *Proprietary and confidential.*
-
 # NOSH POS
 
-A restaurant / retail Point of Sale (POS) system built with React, Vite, Tailwind CSS, and Supabase.
-
-The app supports checkout, inventory control, purchase orders, FIFO inventory tracking, payment methods, discount management, reporting, and expiry alerts.
+NOSH POS is a restaurant and inventory management system built with React, Vite, Tailwind CSS, and Supabase.
 
 ## Features
 
-- Order checkout with cart items, payment type, discount type, and print order flow
-- Inventory management with stock tracking and FIFO deduction/restoration
-- Purchase orders with supplier details and item entry
-- Order history with status updates, completion/cancellation, and inventory adjustments
-- Discount type management for percentage and fixed-price discounts
-- Expiry date alert system for expiring or expired purchase items
-- Reports for inventory value, sales, usage, expired stock, purchase returns, and supplier outstanding
-- Role-based navigation and access control
- 
+- POS checkout with menu items, discounts, taxes, payment methods, and receipt printing
+- Order history with completion, cancellation, and inventory adjustments
+- Inventory opening, daily movement, purchase, add-stock, usage, adjustment, and closing quantities
+- Monthly inventory carry-forward from previous closing quantity to current opening quantity
+- FIFO stock layers and inventory valuation
+- Purchase orders, suppliers, purchase returns, and expiry alerts
+- Inventory, sales, usage, purchase, profit/loss, supplier, expired-stock, and top-selling reports
+- Daily movement comparison with real closing quantities
+- Role-based access control and configurable User Rights
+- User department and position fields
+- PBKDF2 password hashing and password change from the profile menu
+- Activity Log for login, logout, print, export, process, and permission actions
+- Automatic Activity Log cleanup after six months
+- Light and dark themes
 
 ## Requirements
 
-- Node.js 18+ or compatible LTS version
+- Node.js 18+ or current LTS
 - npm
-- Supabase project for database and auth
+- Supabase project
 
 ## Installation
-
-1. Clone the repository:
-
-```bash
-git clone <your-repo-url>
-cd NOSH_POS
-```
-
-2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-3. Configure Supabase:
-
-This project reads Supabase configuration from Vite environment variables. Set the following in a local `.env` file (or in your deployment environment):
+Create `.env` in the project root:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
-The Supabase client in `src/createClients.js` requires these variables and will throw an error if they are missing. See `.env.example` for a template.
+Do not commit private credentials or service-role keys.
 
-4. Run the development server:
+## Database Setup
+
+Run the SQL migrations in Supabase SQL Editor for the same project configured in `.env`.
+
+Important migrations:
+
+1. Existing files in [migrations](migrations)
+2. [migrations/2026-09-18-update-user-profile-password.sql](migrations/2026-09-18-update-user-profile-password.sql)
+3. [migrations/2026-09-18-create-activity-logs.sql](migrations/2026-09-18-create-activity-logs.sql)
+4. [src/migrations/user_rights_schema.sql](src/migrations/user_rights_schema.sql), if User Rights is not installed
+
+The user profile migration adds:
+
+- `department`
+- `position`
+- `password_hash`
+
+The Activity Log migration adds the audit table, access policies, and a daily cleanup job for records older than six months.
+
+## Password Flow
+
+Existing users can log in once with their current password. After successful login, the app creates a PBKDF2 hash, stores it in `password_hash`, and clears the old plaintext password.
+
+New users and password changes use the hash immediately. Password verification is performed in [src/utils/passwordService.js](src/utils/passwordService.js).
+
+## Run the App
 
 ```bash
 npm run dev
 ```
 
-5. Open the app in the browser using the local URL shown by Vite, usually `http://localhost:5173`.
+Open the Vite URL, normally:
 
-## Environment setup suggestion
-
-Notes on environment files and security:
-
-- Keep secrets out of source control. This repository ignores local env files (see `.gitignore`).
-- Use `.env.example` to share which variables are required without exposing secrets.
-- On CI/CD or deployment platforms, configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the environment variables section.
-
-## Supabase schema overview
-
-Key database tables used by this POS system include:
-
-- `orders` — order headers with totals, status, payment type, discount type, and remarks
-- `order_items` — line items for each order, including quantity, price, and discount
-- `menu` — products or services available for sale
-- `menu_ingredients` — inventory components needed for each menu item
-- `inventory` — stock items with current quantity and category/type
-- `discount_types` — discount definitions for percentage and fixed-price discounts
-- `inventory_fifo_layers` — FIFO stock layer tracking to support accurate inventory costing
-
-Relationships:
-
-- `orders` (1) → `order_items` (N)
-- `order_items` (N) → `menu` (1)
-- `menu` (1) → `menu_ingredients` (N)
-- `menu_ingredients` (N) → `inventory` (1)
-- `orders` (N) → `discount_types` (1)
-
-```
-orders
-  └─ order_items
-        └─ menu
-              └─ menu_ingredients
-                    └─ inventory
-
-orders
-  └─ discount_types
+```text
+http://localhost:5173/
 ```
 
-Example schema changes:
+If localhost binding is restricted:
 
-```sql
-ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending';
-ALTER TABLE orders ADD CONSTRAINT status_check CHECK (status IN ('pending', 'completed', 'cancelled'));
-ALTER TABLE discount_types ADD COLUMN discount_amount NUMERIC;
+```bash
+npm run dev -- --host 0.0.0.0
 ```
 
-## Main table summary
+## Commands
 
-- `orders`
-  - `id`, `created_at`, `total`, `status`, `payment_type`, `discount_type`, `discount_percent`, `discount_amount`, `remark`
-- `order_items`
-  - `id`, `order_id`, `menu_id`, `qty`, `price`, `discount_percent`, `discount_amount`
-- `menu`
-  - `id`, `menu_name`, `price`, `category`, `has_ingredients`
-- `menu_ingredients`
-  - `id`, `menu_id`, `inventory_id`, `qty`
-- `inventory`
-  - `id`, `item_name`, `qty`, `type`, `unit`, `price`
-- `discount_types`
-  - `id`, `discount_name`, `discount_percent`, `discount_amount`, `is_active`
-- `inventory_fifo_layers`
-  - `id`, `inventory_id`, `purchase_item_id`, `remaining_qty`, `cost_price`, `created_at`
+```bash
+npm run dev       # Start development server
+npm run build     # Build production assets
+npm run preview   # Preview production build
+npm run lint      # Run ESLint
+```
 
-## Authentication and access control
+## Main Routes
 
-- `src/utils/accessControl.js` controls permissions for pages and actions
-- `src/pages/PrivateRoute.jsx` protects routes behind user authentication
-- User roles determine access to payments, history, inventory, reports, purchase, and discount management
+- `/dashboard` - Dashboard
+- `/payments` - POS checkout
+- `/history` - Order history
+- `/menu` - Menu management
+- `/category` - Menu categories
+- `/inventory` - Inventory management
+- `/internal-consumption` - Internal usage and add stock
+- `/purchase-order` - Purchase orders
+- `/purchase-return` - Purchase returns
+- `/supplier` - Suppliers
+- `/reports/inventory` - Inventory and daily movement report
+- `/reports/total-sales` - Sales report
+- `/reports/sale-usage` - Sale usage report
+- `/reports/internal-usage-add-stock` - Usage and add-stock report
+- `/reports/profit-loss` - Profit and loss report
+- `/reports/supplier-outstanding` - Supplier report
+- `/reports/expire` - Expired inventory report
+- `/purchase-report` - Purchase report
+- `/purchase-return-report` - Purchase return report
+- `/activity-log` - User activity and print history
+- `/user-create` - User management
+- `/user-right` - Permission management
 
-## App structure
+## Inventory Calculation
 
-- `src/App.jsx` — application shell, routes, auth session state, theme toggle, expiry checks, global inventory/menu state
-- `src/createClients.js` — Supabase client configuration
-- `src/pages/Pyaments.jsx` — payment/cart checkout page and order completion
-- `src/pages/History.jsx` — order history and status management with inventory restore/deduct logic
-- `src/pages/DiscountType.jsx` — add/edit discount types with percent and fixed-value support
-- `src/pages/Inventory.jsx` — inventory item management and stock updates
-- `src/pages/Purchase.jsx` — purchase order creation and supplier purchase flow
-- `src/pages/PurchaseReturn.jsx` — purchase return processing
-- `src/components/Navbar.jsx` — top app navigation bar
-- `src/components/Sidebar.jsx` — role-based route navigation
-- `src/utils/fifoService.js` — FIFO inventory layer logic and stock deduction utilities
-- `src/utils/expiryService.js` — expiry detection and alert helpers
+For a selected month:
 
-## SQL migrations and schema scripts
+```text
+Closing Qty = Opening Qty
+            + Purchase
+            + Add Stock
+            + Adjustment
+            - Sale Usage
+            - Internal Usage
+```
 
-The repository includes SQL files for schema changes and inventory tracking:
+The next month opening quantity uses the previous month closing quantity. Movement filters use movement dates rather than inventory creation dates.
 
-- `migrations/2026-07-24-add-discount-amount-to-discount-types.sql`
-- `migrations/2026-07-19-create-inventory-categories.sql`
-- `migrations/2026-07-19-add-category-to-internal-consumption-items.sql`
-- `migrations/2026-07-19-usage-stock-categories.sql`
-- `migrations/2026-07-14-add-order-cancel-columns.sql`
-- `migrations/2026-07-14-add-order-complete-columns.sql`
-- `inventory_fifo_layers.sql`
-- `purchase_return_fifo.sql`
+## User Roles
 
-These scripts help extend the database to support discount amount storage, FIFO inventory layers, category tracking, and order status fields.
+- `superadmin` - Full access; permissions cannot be edited
+- `admin` - Administrative access
+- `chef` - Menu, category, internal usage, history, and related access
+- `user` - Dashboard, payments, history, and internal consumption access
 
-## How to use
+Permissions are defined in [src/utils/accessControl.js](src/utils/accessControl.js) and enforced by [src/pages/PrivateRoute.jsx](src/pages/PrivateRoute.jsx).
 
-- Use the sidebar to navigate between Dashboard, Payments, History, Inventory, and Reports.
-- Add or update inventory items from the Inventory page.
-- Create purchase orders and supplier entries from the Purchase section.
-- Checkout orders from the Payments page using cart items, select discount and payment type.
-- Manage discount types in the Discount Type page to support percent or fixed-price discounts.
-- Review past orders and change status via the History page, where inventory is restored or deducted automatically.
-- Monitor expiring stock through expiry alerts and report pages.
+## Activity Log
 
-## Useful notes
+Activity Log records include the user, role, module, action, entity, description, timestamp, and print/process information. User Rights changes are also recorded.
 
-- The cart action button label is `Clear Cart` for better clarity.
-- Payment type selection is shown above discount type in the checkout sidebar.
-- Fixed-price discount support is available in discount types and summary display.
-- Role-based access control is implemented in `src/utils/accessControl.js`.
-- Expiry checks run on session load and notify users about expiring or expired items.
+Activity records are retained for six months. The database cleanup job runs daily.
 
-## Available commands
+## Project Structure
 
-- `npm run dev` — start the development server
-- `npm run build` — build production assets
-- `npm run preview` — preview the production build locally
-- `npm run lint` — run ESLint across the project
-
-## Next improvements
-
-- Add authentication and role seeds for initial users
-- Add database migration automation or deploy scripts
-- Add tests for checkout, inventory, and history flows
+- `src/App.jsx` - Routes, shared state, theme, and global activity capture
+- `src/components/Navbar.jsx` - Theme, user profile, and password change
+- `src/components/Sidebar.jsx` - Permission-aware navigation
+- `src/pages/Pyaments.jsx` - POS checkout
+- `src/pages/Inventory.jsx` - Inventory and monthly movement management
+- `src/pages/InventoryReport.jsx` - Inventory reports and comparisons
+- `src/pages/ActivityLog.jsx` - Activity Log page
+- `src/pages/UserCreate.jsx` - User profile management
+- `src/pages/UserRight.jsx` - User permission management
+- `src/utils/activityLogService.js` - Activity logging
+- `src/utils/passwordService.js` - Password hashing and verification
+- `src/utils/inventoryOpening.js` - Monthly opening and closing calculations
+- `src/utils/dailyMovementService.js` - Daily movement updates
+- `migrations/` - Supabase SQL migrations
 
 ## License
 
-No license is included in this repository. Add a `LICENSE` file if you want to publish or share this project.
+Copyright (c) 2026 Nosh. All rights reserved. This project is proprietary and confidential.

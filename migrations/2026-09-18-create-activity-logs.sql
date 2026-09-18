@@ -64,6 +64,17 @@ BEGIN
 END;
 $$;
 
+-- User profile and password security update.
+ALTER TABLE public."user"
+  ADD COLUMN IF NOT EXISTS department TEXT,
+  ADD COLUMN IF NOT EXISTS position TEXT,
+  ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+-- Existing plaintext passwords are retained only for one-time login migration.
+-- The application replaces password_hash after a successful legacy login.
+CREATE INDEX IF NOT EXISTS idx_user_department ON public."user"(department);
+CREATE INDEX IF NOT EXISTS idx_user_position ON public."user"(position);
+
 REVOKE ALL ON FUNCTION public.delete_old_activity_logs() FROM PUBLIC, anon, authenticated;
 
 -- pg_cron is available in Supabase. Re-running this migration replaces the

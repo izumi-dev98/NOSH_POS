@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { hasFeature } from "../utils/accessControl";
+import { hashPassword } from "../utils/passwordService";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -15,6 +16,8 @@ export default function UserManagement() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("user");
+  const [department, setDepartment] = useState("");
+  const [position, setPosition] = useState("");
   const currentUser = JSON.parse(localStorage.getItem("user"));
   const canAddUser = hasFeature(currentUser, "btn-user-add");
   const canEditUser = hasFeature(currentUser, "btn-user-edit");
@@ -38,6 +41,8 @@ export default function UserManagement() {
     setUsername("");
     setPassword("");
     setRole("user");
+    setDepartment("");
+    setPosition("");
     setModalOpen(true);
   };
 
@@ -47,6 +52,8 @@ export default function UserManagement() {
     setUsername(user.username);
     setPassword(""); // leave blank, only fill if changing
     setRole(user.role);
+    setDepartment(user.department || "");
+    setPosition(user.position || "");
     setModalOpen(true);
   };
 
@@ -60,8 +67,8 @@ export default function UserManagement() {
     try {
       if (editingUser) {
         // UPDATE
-        const updatedData = { full_name: fullName, username, role };
-        if (password) updatedData.password = password;
+        const updatedData = { full_name: fullName, username, role, department, position };
+        if (password) updatedData.password_hash = await hashPassword(password);
 
         const { data, error } = await supabase
           .from("user")
@@ -76,9 +83,10 @@ export default function UserManagement() {
         Swal.fire("Success", "User updated", "success");
       } else {
         // CREATE
+        const passwordHash = await hashPassword(password);
         const { data, error } = await supabase
           .from("user")
-          .insert([{ full_name: fullName, username, password, role }])
+          .insert([{ full_name: fullName, username, password_hash: passwordHash, department, position, role }])
           .select()
           .single();
 
@@ -89,7 +97,7 @@ export default function UserManagement() {
       }
 
       setModalOpen(false);
-    } catch (err) {
+    } catch {
       Swal.fire("Error", "Something went wrong", "error");
     }
   };
@@ -171,6 +179,8 @@ export default function UserManagement() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Full Name</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Username</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Role</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Department</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Position</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Actions</th>
             </tr>
           </thead>
@@ -181,6 +191,8 @@ export default function UserManagement() {
               <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{user.full_name}</td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{user.username}</td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300 capitalize">{user.role}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{user.department || "-"}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{user.position || "-"}</td>
               <td className="px-4 py-3">
                 {canEditUser && (
                   <button
@@ -206,7 +218,7 @@ export default function UserManagement() {
           ))}
           {paginatedUsers.length === 0 && (
             <tr>
-              <td colSpan="5" className="text-center py-4 text-slate-500 dark:text-slate-400">No users found</td>
+              <td colSpan="7" className="text-center py-4 text-slate-500 dark:text-slate-400">No users found</td>
             </tr>
           )}
         </tbody>
@@ -262,6 +274,8 @@ export default function UserManagement() {
                 <option value="chef">Chef</option>
                 <option value="user">User</option>
               </select>
+              <input type="text" placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="text" placeholder="Position" value={position} onChange={(e) => setPosition(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"

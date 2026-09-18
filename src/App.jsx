@@ -263,7 +263,7 @@ export default function App() {
     <div className="flex">
       {user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
       <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${user && isOpen ? "ml-60" : "ml-0"}`}>
-        {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} />}
+        {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} onUserUpdated={setUser} />}
         <main className={`p-6 ${user ? "pt-16" : ""}`}>
           <Suspense fallback={<div className="flex justify-center items-center min-h-[240px] text-slate-600 dark:text-slate-300">Loading page...</div>}>
             <Routes>

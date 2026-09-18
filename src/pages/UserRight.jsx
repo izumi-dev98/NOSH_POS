@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { FUNCTION_OPTIONS, ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
+import { logActivity } from "../utils/activityLogService";
 
 export default function UserRight() {
   const [users, setUsers] = useState([]);
@@ -50,7 +51,7 @@ export default function UserRight() {
     try {
       const { data: usersData, error: usersErr } = await supabase
         .from("user")
-        .select("id, full_name, username, role")
+        .select("id, full_name, username, role, department, position")
         .order("id", { ascending: true });
 
       if (usersErr) throw usersErr;
@@ -127,6 +128,25 @@ export default function UserRight() {
     );
   };
 
+  const toggleGroup = (items) => {
+    if (selectedUser?.role === "superadmin") return;
+    const groupKeys = items.map((item) => item.key);
+    const allSelected = groupKeys.every((key) => selectedRights.includes(key));
+    setSelectedRights((prev) => allSelected
+      ? prev.filter((key) => !groupKeys.includes(key))
+      : Array.from(new Set([...prev, ...groupKeys])));
+  };
+
+  const selectAllRights = () => {
+    if (selectedUser?.role === "superadmin") return;
+    setSelectedRights(FUNCTION_OPTIONS.map((option) => option.key));
+  };
+
+  const clearAllRights = () => {
+    if (selectedUser?.role === "superadmin") return;
+    setSelectedRights([]);
+  };
+
   const handleSave = async () => {
     if (!selectedUser) return;
     try {
@@ -147,6 +167,15 @@ export default function UserRight() {
       const rightsForUser =
         selectedUser.role === "superadmin" ? ROLE_ACCESS_RIGHTS.superadmin : selectedRights;
       setRightsByUser((prev) => ({ ...prev, [userId]: rightsForUser }));
+
+      void logActivity({
+        module: "User Rights",
+        action: "UPDATE",
+        description: `Updated permissions for ${selectedUser.username}`,
+        entityType: "user_rights",
+        entityId: userId,
+        newData: { permissions: rightsForUser },
+      });
 
       const localUser = JSON.parse(localStorage.getItem("user") || "null");
       if (localUser?.id === userId) {
@@ -202,6 +231,7 @@ export default function UserRight() {
                 >
                   <div className="font-semibold">{u.full_name || "-"}</div>
                   <div className="text-xs text-slate-500">@{u.username} • {u.role}</div>
+                  <div className="text-xs text-slate-400">{u.department || "-"} • {u.position || "-"}</div>
                 </button>
               ))}
               {filteredUsers.length === 0 && (
@@ -227,17 +257,28 @@ export default function UserRight() {
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={handleSave}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
-                  >
-                    Save Rights
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={selectAllRights} disabled={selectedUser.role === "superadmin"} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Select All</button>
+                    <button onClick={clearAllRights} disabled={selectedUser.role === "superadmin"} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Clear All</button>
+                    <button onClick={handleSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save Rights</button>
+                  </div>
                 </div>
 
                 {Object.entries(groupedFunctions).map(([groupName, items]) => (
                   <div key={groupName} className="mb-4">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">{groupName}</h3>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-700">{groupName}</h3>
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={items.every((item) => selectedRights.includes(item.key))}
+                          onChange={() => toggleGroup(items)}
+                          disabled={selectedUser.role === "superadmin"}
+                          className="h-4 w-4"
+                        />
+                        Select group
+                      </label>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {items.map((fn) => (
                         <label
