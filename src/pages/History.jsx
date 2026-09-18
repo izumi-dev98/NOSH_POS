@@ -478,9 +478,11 @@ export default function History({ setInventory }) {
     const printedByName = localUser?.full_name || localUser?.username || localUser?.id || 'Unknown';
     const receiptContent = `
       <html>
-        <head><title>Order #${order.id}</title></head>
+        <head><title></title><style>@page { margin: 0; }</style></head>
         <body style="font-family: monospace; width: 300px; padding: 10px;">
-          <h1 style="text-align:center;">F&B ATY PRINT SLIP</h1>
+          <h1 style="text-align:center; margin:0;">Food Corner</h1>
+          <h2 style="text-align:center; margin:4px 0; font-size:1em;">Nosh Posh</h2>
+          <p style="text-align:center; margin:4px 0 12px;">No.5 (A), Industry Zone Street, 4 QTR,<br/>Ayetharyar, Taunggyi, Myanmar</p>
           <p>Print Slip ID: ${order.id}</p>
           <p>Date: ${date}</p>
           <table style="width:100%; border-collapse: collapse;">
@@ -503,7 +505,7 @@ export default function History({ setInventory }) {
             <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(order.total)}</p>
           </div>
           <p style="margin-top:12px;">Printed by: ${printedByName}</p>
-          <p style="text-align:center;">Thank you!</p>
+          <p style="text-align:center; margin-top:12px;">Thank you!</p>
         </body>
       </html>
     `;
