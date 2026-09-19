@@ -1057,6 +1057,7 @@ export default function InventoryReport() {
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Add Stock</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
+                  <th className="px-4 py-3 text-center font-semibold text-slate-700">Adjustment</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Unit Price</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
@@ -1065,11 +1066,11 @@ export default function InventoryReport() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="10" className="text-center py-6">Loading...</td>
+                    <td colSpan="11" className="text-center py-6">Loading...</td>
                   </tr>
                 ) : currentData.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="text-center py-6">No Data Found</td>
+                    <td colSpan="11" className="text-center py-6">No Data Found</td>
                   </tr>
                 ) : (
                   currentData.map((item, index) => {
@@ -1088,8 +1089,11 @@ export default function InventoryReport() {
                         <td className="px-4 py-3 text-center text-emerald-600">{Number(movement.add_stock_qty || 0)}</td>
                         <td className="px-4 py-3 text-center text-red-600">{Number(movement.sale_usage_qty || 0)}</td>
                         <td className="px-4 py-3 text-center text-red-600">{Number(movement.internal_usage_qty || 0)}</td>
+                        <td className={`px-4 py-3 text-center ${Number(movement.adjust_qty || 0) !== 0 ? "text-amber-600" : "text-slate-400"}`}>
+                          {Number(movement.adjust_qty || 0) > 0 ? `+${Number(movement.adjust_qty)}` : Number(movement.adjust_qty || 0)}
+                        </td>
                         <td className={`px-4 py-3 text-center text-sm font-bold ${Number(item.qty || 0) === 0 ? "text-red-600" : "text-emerald-700"}`}>
-                          {Number(movement.closing_qty ?? item.qty ?? 0)}
+                          {Number(item.qty || 0)}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-600">
                           {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}

@@ -16,6 +16,7 @@ const Inventory = lazy(() => import("./pages/Inventory"));
 import supabase from "./createClients";
 import { fetchExpiringSoonPurchaseItems, runExpiryCheck } from "./utils/expiryService";
 import { logActivity, logPrint } from "./utils/activityLogService";
+import { upsertDailyMovement } from "./utils/dailyMovementService";
 const InventoryReport = lazy(() => import("./pages/InventoryReport"));
 const TotalSalesReport = lazy(() => import("./pages/TotalSalesReport"));
 const InternalUsageAddStockReport = lazy(() => import("./pages/InternalUsageAddStockReport"));
@@ -284,9 +285,27 @@ export default function App() {
     else { setInventory(prev => [...prev, data]); Swal.fire("Success", "Inventory added", "success"); }
   };
   const updateInventoryItem = async (id, updatedItem) => {
+    const previousItem = inventory.find((item) => item.id === id);
     const { data, error } = await supabase.from("inventory").update(updatedItem).eq("id", id).select().single();
     if (error) Swal.fire("Error", error.message, "error");
-    else { setInventory(prev => prev.map(i => i.id === id ? data : i)); Swal.fire("Success", "Inventory updated", "success"); }
+    else {
+      setInventory(prev => prev.map(i => i.id === id ? data : i));
+      const previousQty = Number(previousItem?.qty || 0);
+      const nextQty = Number(data?.qty ?? previousQty);
+      const adjustmentQty = nextQty - previousQty;
+
+      if (Number.isFinite(adjustmentQty) && adjustmentQty !== 0) {
+        try {
+          await upsertDailyMovement({ inventoryId: id, changes: { adjust_qty: adjustmentQty } });
+        } catch (movementError) {
+          console.error("Inventory adjustment movement was not saved:", movementError);
+          Swal.fire("Warning", "Inventory updated, but the system adjustment record could not be saved.", "warning");
+          return;
+        }
+      }
+
+      Swal.fire("Success", "Inventory updated", "success");
+    }
   };
   const deleteInventoryItem = async (id) => {
     const result = await Swal.fire({ title: "Delete Inventory?", icon: "warning", showCancelButton: true, confirmButtonText: "Yes" });

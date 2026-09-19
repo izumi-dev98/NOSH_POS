@@ -845,6 +845,31 @@ export default function Inventory({
       });
     }
 
+    // Include manual quantity changes from the daily movement ledger.
+    const { data: adjustmentMovements } = await supabase
+      .from("daily_inventory_movements")
+      .select("id, movement_date, adjust_qty")
+      .eq("inventory_id", targetId)
+      .neq("adjust_qty", 0)
+      .order("movement_date", { ascending: true });
+
+    (adjustmentMovements || []).forEach((movement) => {
+      const adjustmentQty = Number(movement.adjust_qty || 0);
+      history.push({
+        id: `adjustment-${movement.id}`,
+        qty: adjustmentQty,
+        foc_qty: 0,
+        unit_price: 0,
+        purchase_date: movement.movement_date,
+        invoice_number: `Adjustment #${movement.id}`,
+        supplier_id: null,
+        source_type: "System Adjustment",
+        status: "adjustment",
+        original_qty: null,
+        returned_qty: 0,
+      });
+    });
+
     // Sort by date (oldest first)
     history.sort((a, b) => {
       const tsA = getFifoTimestamp(a.fifo_date);
@@ -1047,8 +1072,8 @@ export default function Inventory({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-xs align-middle">
-                        <span className={`px-2 py-1 rounded font-semibold ${Number(movement.closing_qty || 0) > 2 ? "text-green-600 bg-green-50" : "text-red-700 bg-red-50"}`}>
-                          {Number(movement.closing_qty || 0)}
+                        <span className={`px-2 py-1 rounded font-semibold ${Number(item.qty || 0) > 2 ? "text-green-600 bg-green-50" : "text-red-700 bg-red-50"}`}>
+                          {Number(item.qty || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-medium text-xs align-middle">
@@ -1263,7 +1288,7 @@ export default function Inventory({
       )}
 
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60">
           <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Create Inventory Category</h3>
             <input
@@ -1349,6 +1374,7 @@ export default function Inventory({
                       const billableQty = qty - focQty;
                       const isZero = qty === 0;
                       const isUsage = item.source_type === "Sale Usage" || item.source_type === "Internal Usage";
+                      const isAdjustment = item.source_type === "System Adjustment";
                       const rowTotal = (billableQty * (parseFloat(item.unit_price) || 0));
                       return (
                         <tr
@@ -1365,6 +1391,8 @@ export default function Inventory({
                                   ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
                                   : item.source_type === "Internal Usage"
                                     ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                    : isAdjustment
+                                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                     : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400"
                             }`}>
                               {item.source_type || "Purchase"}
@@ -1376,21 +1404,21 @@ export default function Inventory({
                           <td className="px-4 py-2 text-center">
                             <div className="flex flex-col items-center text-xs">
                               <span className={`font-medium ${isUsage ? "text-red-600" : item.qty === 0 ? "text-red-600" : "text-slate-600 dark:text-slate-400"}`}>
-                                {isUsage ? `-${item.qty}` : item.qty}
+                                {isUsage ? `-${Math.abs(item.qty)}` : isAdjustment && item.qty > 0 ? `+${item.qty}` : item.qty}
                               </span>
                               <span className="text-slate-500 text-[10px]">
-                                {isUsage ? "Used" : `(Orig: ${item.original_qty} / -${item.returned_qty || 0})`}
+                                {isUsage ? "Used" : isAdjustment ? "Adjusted" : `(Orig: ${item.original_qty} / -${item.returned_qty || 0})`}
                               </span>
                             </div>
                           </td>
                           <td className="px-4 py-2 text-center">
-                            {!isUsage && focQty > 0 ? (
+                            {!isUsage && !isAdjustment && focQty > 0 ? (
                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{focQty}</span>
                             ) : (
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{isUsage ? "-" : formatMMK(item.unit_price)}</td>
+                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{isUsage || isAdjustment ? "-" : formatMMK(item.unit_price)}</td>
                           <td className="px-4 py-2 text-center">
                             {item.expiry_date ? (
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -1404,7 +1432,7 @@ export default function Inventory({
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{isUsage ? "-" : formatMMK(rowTotal)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{isUsage || isAdjustment ? "-" : formatMMK(rowTotal)}</td>
                         </tr>
                       );
                     })
