@@ -48,6 +48,33 @@ const getStoredUser = () => {
   }
 };
 
+const getPageName = (path) => {
+  const page = path.split("/").filter(Boolean).pop() || "dashboard";
+  return page.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const getActionTarget = (button, label) => {
+  const containers = [
+    button.closest("tr"),
+    button.closest("[role='dialog']"),
+    button.parentElement?.parentElement,
+    button.parentElement,
+  ].filter(Boolean);
+
+  for (const container of containers) {
+    const targetText = Array.from(container.querySelectorAll("input, textarea, select, [type='password'], button"))
+      .reduce((text, field) => text.replace(field.value || "", ""), container.textContent || "")
+      .replace(label, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (targetText.length >= 12) {
+      return targetText.length > 180 ? `${targetText.slice(0, 177)}...` : targetText;
+    }
+  }
+
+  return "";
+};
+
 export default function App() {
   const [isOpen, setIsOpen] = useState(window.innerWidth >= 768);
   const [inventory, setInventory] = useState([]);
@@ -144,12 +171,16 @@ export default function App() {
 
       if (!printMatch && !processMatch) return;
 
-      const module = window.location.pathname.split("/").filter(Boolean).join("/") || "Application";
+      const path = window.location.pathname;
+      const module = path.split("/").filter(Boolean).join("/") || "Application";
+      const pageName = getPageName(path);
+      const target = getActionTarget(button, label);
+      const targetDescription = target ? ` Target: ${target}.` : "";
       if (printMatch) {
         void logPrint({
           module,
-          description: `Started print: ${label}`,
-          metadata: { path: window.location.pathname, button: label },
+          description: `${user?.username || "User"} printed from ${pageName}. Button: ${label}.${targetDescription}`,
+          metadata: { path, button: label, page: pageName, target },
         });
         return;
       }
@@ -157,8 +188,8 @@ export default function App() {
       void logActivity({
         module,
         action: processMatch[1].toUpperCase(),
-        description: `Started ${processMatch[1].toLowerCase()} process: ${label}`,
-        metadata: { path: window.location.pathname, button: label },
+        description: `${user?.username || "User"} performed ${processMatch[1].toLowerCase()} on ${pageName}. Button: ${label}.${targetDescription}`,
+        metadata: { path, button: label, page: pageName, target },
       });
     };
 
@@ -303,7 +334,7 @@ export default function App() {
       <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${!maintenanceRestricted && user && isOpen ? "ml-60" : "ml-0"}`}>
         {!maintenanceRestricted && user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} onUserUpdated={setUser} maintenanceMode={maintenanceMode} onMaintenanceToggle={toggleMaintenanceMode} />}
         <main className={`p-6 ${user ? "pt-16" : ""}`}>
-          <Suspense fallback={<div className="flex justify-center items-center min-h-[240px] text-slate-600 dark:text-slate-300">Loading page...</div>}>
+          <Suspense fallback={<div className="flex justify-center items-center min-h-60 text-slate-600 dark:text-slate-300">Loading page...</div>}>
             {maintenanceRestricted ? <Maintenance onLogout={() => setUser(null)} /> : <Routes>
             {/* Login redirects to dashboard if already logged in */}
             <Route

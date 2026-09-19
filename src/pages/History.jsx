@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { buildFifoList, deductFromFifo, restoreToFifo } from "../utils/fifoService";
 import { hasFeature } from "../utils/accessControl";
 import { upsertDailyMovement } from "../utils/dailyMovementService";
+import { logActivity } from "../utils/activityLogService";
 
 export default function History({ setInventory }) {
   const [history, setHistory] = useState([]);
@@ -792,6 +793,23 @@ export default function History({ setInventory }) {
         .update({ status: "completed", completed_by: localUser?.id || null, completed_at: new Date().toISOString() })
         .eq("id", order.id);
       if (statusErr) throw statusErr;
+
+      const itemSummary = (order.items || [])
+        .map((item) => `${item.menu_name || "Unknown item"} x${item.qty}`)
+        .join(", ");
+      const inventorySummary = Object.entries(neededByInventoryId)
+        .map(([inventoryId, quantity]) => {
+          const inventoryItem = updatedInventory.find((item) => item.id === Number(inventoryId));
+          return `${inventoryItem?.item_name || `Inventory #${inventoryId}`} -${quantity}`;
+        })
+        .join(", ");
+      void logActivity({
+        module: "History",
+        action: "COMPLETED",
+        description: `User ${localUser?.username || "Unknown user"} completed order #${order.id}. Items: ${itemSummary || "None"}. Inventory used: ${inventorySummary || "None"}.`,
+        entityType: "order",
+        entityId: order.id,
+      });
 
       if (setInventory) setInventory(updatedInventory);
 
