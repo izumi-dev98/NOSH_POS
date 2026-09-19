@@ -572,7 +572,66 @@ export default function History({ setInventory }) {
       // }
 
       // FIFO deduction from stock history (Purchase + Add Stock) by created_at
+      let stockHistoryPromise;
+      const getStockHistory = async () => {
+        if (!stockHistoryPromise) {
+          stockHistoryPromise = (async () => {
+            const [purchasesResult, addStockResult, inventoryResult] = await Promise.all([
+              supabase
+                .from("purchases")
+                .select("id, date, created_at")
+                .eq("status", "received"),
+              supabase
+                .from("internal_consumption")
+                .select("id, created_at")
+                .eq("status", "add_stock"),
+              supabase.from("inventory").select("id, item_name, type"),
+            ]);
+
+            if (purchasesResult.error) throw purchasesResult.error;
+            if (addStockResult.error) throw addStockResult.error;
+            if (inventoryResult.error) throw inventoryResult.error;
+
+            const purchases = purchasesResult.data || [];
+            const addStockRecords = addStockResult.data || [];
+            const [purchaseItemsResult, addStockItemsResult] = await Promise.all([
+              purchases.length > 0
+                ? supabase
+                    .from("purchase_items")
+                    .select("id, qty, unit_price, purchase_id, item_name, type")
+                    .in("purchase_id", purchases.map((purchase) => purchase.id))
+                : Promise.resolve({ data: [], error: null }),
+              addStockRecords.length > 0
+                ? supabase
+                    .from("internal_consumption_items")
+                    .select("id, qty, unit_price, consumption_id, inventory_id")
+                    .in("consumption_id", addStockRecords.map((record) => record.id))
+                : Promise.resolve({ data: [], error: null }),
+            ]);
+
+            if (purchaseItemsResult.error) throw purchaseItemsResult.error;
+            if (addStockItemsResult.error) throw addStockItemsResult.error;
+
+            return {
+              purchases,
+              addStockRecords,
+              allInventory: inventoryResult.data || [],
+              purchaseItems: purchaseItemsResult.data || [],
+              addStockItems: addStockItemsResult.data || [],
+            };
+          })();
+        }
+        return stockHistoryPromise;
+      };
+
       const deductFromStockHistory = async (inventoryId, _itemName, _itemType, qtyToDeduct) => {
+        const {
+          purchases,
+          addStockRecords,
+          allInventory,
+          purchaseItems,
+          addStockItems,
+        } = await getStockHistory();
         const getFifoTimestamp = (value) => {
           if (!value) return Number.POSITIVE_INFINITY;
           let ts = new Date(value).getTime();
@@ -580,33 +639,12 @@ export default function History({ setInventory }) {
           return ts;
         };
 
-        // Fetch all received purchases with created_at for accurate FIFO
-        const { data: purchases, error: purchasesErr } = await supabase
-          .from("purchases")
-          .select("id, date, created_at")
-          .eq("status", "received");
-
-        if (purchasesErr) throw purchasesErr;
         const purchaseIds = (purchases || []).map((p) => p.id);
-
-        // Fetch all add_stock records
-        const { data: addStockRecords, error: addStockErr } = await supabase
-          .from("internal_consumption")
-          .select("id, created_at")
-          .eq("status", "add_stock");
-
-        if (addStockErr) throw addStockErr;
         const addStockIds = (addStockRecords || []).map((r) => r.id);
 
         // Build combined FIFO list
         const fifoList = [];
 
-        // Fetch inventory for matching
-        const { data: allInventory, error: invErr } = await supabase
-          .from("inventory")
-          .select("id, item_name, type");
-
-        if (invErr) throw invErr;
         const targetInv = allInventory.find(inv => inv.id === inventoryId);
 
         if (targetInv) {
@@ -620,12 +658,6 @@ export default function History({ setInventory }) {
 
           // Add purchase items
           if (purchaseIds.length > 0) {
-            const { data: purchaseItems, error: itemsErr } = await supabase
-              .from("purchase_items")
-              .select("id, qty, unit_price, purchase_id, item_name, type")
-              .in("purchase_id", purchaseIds);
-
-            if (itemsErr) throw itemsErr;
             if (purchaseItems) {
               const exactMatches = purchaseItems.filter((pi) =>
                 normalizeName(pi.item_name) === targetName &&
@@ -653,12 +685,6 @@ export default function History({ setInventory }) {
 
           // Add add_stock items
           if (addStockIds.length > 0) {
-            const { data: addStockItems, error: itemsErr } = await supabase
-              .from("internal_consumption_items")
-              .select("id, qty, unit_price, consumption_id, inventory_id")
-              .in("consumption_id", addStockIds);
-
-            if (itemsErr) throw itemsErr;
             if (addStockItems) {
               addStockItems.forEach(ai => {
                 if (ai.inventory_id === inventoryId) {
@@ -725,10 +751,9 @@ export default function History({ setInventory }) {
         return remaining;
       };
 
-      const purchaseHistoryWarnings = [];
-
       // Deduct inventory + purchase history
-      for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+      const purchaseHistoryWarnings = (await Promise.all(
+        Object.entries(neededByInventoryId).map(async ([inventoryId, neededQty]) => {
         const inv = updatedInventory.find((i) => i.id === Number(inventoryId));
         const currentQty = parseFloat(inv?.qty) || 0;
         const newQty = currentQty - neededQty;
@@ -756,9 +781,11 @@ export default function History({ setInventory }) {
           neededQty,
         );
         if (remaining > 0) {
-          purchaseHistoryWarnings.push(`${inv?.item_name || inventoryId} (remaining ${remaining})`);
+          return `${inv?.item_name || inventoryId} (remaining ${remaining})`;
         }
-      }
+        return null;
+      }),
+      )).filter(Boolean);
 
       const { error: statusErr } = await supabase
         .from("orders")

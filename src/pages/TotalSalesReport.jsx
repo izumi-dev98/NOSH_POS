@@ -67,7 +67,7 @@ export default function TotalSalesReport() {
         const chunkResults = await Promise.all(chunks.map(async (chunk) => {
           const { data: chunkData, error: chunkErr } = await supabase
             .from("order_items")
-            .select("id, order_id, menu_id, menu_set_id, menu_name, qty, price, original_price")
+            .select("id, order_id, menu_id, menu_set_id, qty, price, original_price")
             .in("order_id", chunk)
             .order("id", { ascending: true })
             .range(0, 9999);
