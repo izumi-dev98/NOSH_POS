@@ -291,6 +291,13 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
+    setProcessingReturnAction({ id: ret.id, action: "complete" });
+    Swal.fire({
+      title: "Completing return...",
+      text: "Updating inventory, please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       // Get return items
       const { data: items } = await supabase
@@ -543,13 +550,6 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
-    setProcessingReturnAction({ id: ret.id, action: "cancel" });
-    Swal.fire({
-      title: "Cancelling return...",
-      text: "Restoring inventory, please wait.",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
     try {
       const purchaseIds = [...new Set(itemsToReturn.map(i => i.purchase_id))];
       const fifoConsumptionRecords = [];
@@ -717,6 +717,13 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
+    setProcessingReturnAction({ id: ret.id, action: "cancel" });
+    Swal.fire({
+      title: "Cancelling return...",
+      text: "Restoring inventory, please wait.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
     try {
       // Only restore inventory if return was completed
       if (ret.status === "completed") {
@@ -1276,15 +1283,17 @@ export default function PurchaseReturn({ setInventory }) {
               >
                 Close
               </button>
-              <button
-                onClick={() => {
-                  setShowReturnItemsModal(false);
-                  handleCancelReturn(selectedReturn);
-                }}
-                className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
-              >
-                Cancel Return
-              </button>
+              {selectedReturn?.status !== "cancelled" && (
+                <button
+                  onClick={() => {
+                    setShowReturnItemsModal(false);
+                    handleCancelReturn(selectedReturn);
+                  }}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
+                >
+                  Cancel Return
+                </button>
+              )}
             </div>
           </div>
         </div>

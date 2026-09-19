@@ -22,6 +22,7 @@ export default function Inventory({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const [latestPrices, setLatestPrices] = useState({});
+  const [returnedQtyMap, setReturnedQtyMap] = useState({});
   const [creationDateFrom, setCreationDateFrom] = useState("");
   const [creationDateTo, setCreationDateTo] = useState("");
 
@@ -133,25 +134,43 @@ export default function Inventory({
         .eq("status", "received");
 
       const receivedPurchaseIds = purchases?.map(p => p.id) || [];
+      const [{ data: returnRecords }, { data: returnItems }] = await Promise.all([
+        supabase.from("purchase_returns").select("id, status"),
+        supabase.from("purchase_return_items").select("return_id, item_name, type, qty")
+      ]);
+      const prices = {};
+      const returnedQuantities = {};
 
       if (receivedPurchaseIds.length > 0) {
         const { data: purchaseItemsData } = await supabase
           .from("purchase_items")
-          .select("item_name, unit_price")
+          .select("item_name, unit_price, original_qty, qty, type")
           .in("purchase_id", receivedPurchaseIds)
           .order("id", { ascending: false });
 
         if (purchaseItemsData) {
-          const prices = {};
           purchaseItemsData.forEach(item => {
             const key = item.item_name?.toLowerCase().trim();
             if (key && !prices[key]) {
               prices[key] = item.unit_price;
             }
           });
-          setLatestPrices(prices);
         }
       }
+
+      const activeReturnIds = new Set((returnRecords || [])
+        .filter(returnRecord => returnRecord.status !== "cancelled")
+        .map(returnRecord => returnRecord.id));
+      (returnItems || []).forEach(item => {
+        if (!activeReturnIds.has(item.return_id)) return;
+        const itemName = item.item_name?.toLowerCase().trim();
+        const itemType = (item.type || "").toLowerCase().trim();
+        const returnedKey = `${itemName}::${itemType}`;
+        returnedQuantities[returnedKey] = (returnedQuantities[returnedKey] || 0) + Number(item.qty || 0);
+        returnedQuantities[itemName] = (returnedQuantities[itemName] || 0) + Number(item.qty || 0);
+      });
+      setLatestPrices(prices);
+      setReturnedQtyMap(returnedQuantities);
     } catch (err) {
       console.error("Error fetching latest prices:", err);
     }
@@ -995,6 +1014,7 @@ export default function Inventory({
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Add Stock</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
+                <th className="px-4 py-3 text-center font-semibold text-orange-700">Returned</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Opening Date</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Expiry Date</th>
@@ -1005,7 +1025,7 @@ export default function Inventory({
             <tbody className="bg-white">
               {paginatedInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="14" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="15" className="px-4 py-8 text-center text-slate-500">
                     No inventory found
                   </td>
                 </tr>
@@ -1026,6 +1046,8 @@ export default function Inventory({
                     sale_usage_qty: 0,
                     internal_usage_qty: 0,
                   };
+                  const itemNameKey = item.item_name?.toLowerCase().trim();
+                  const returnedQty = returnedQtyMap[`${itemNameKey}::${(item.type || "").toLowerCase().trim()}`] || returnedQtyMap[itemNameKey] || 0;
 
                   return (
                     <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
@@ -1069,6 +1091,11 @@ export default function Inventory({
                       <td className="px-4 py-3 text-center text-xs align-middle">
                         <span className={`font-medium ${Number(movementTotals.internal_usage_qty || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
                           {Number(movementTotals.internal_usage_qty || 0) > 0 ? `-${Number(movementTotals.internal_usage_qty)}` : "0"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs align-middle">
+                        <span className={`font-medium ${returnedQty > 0 ? "text-orange-600" : "text-slate-400"}`}>
+                          {returnedQty > 0 ? `-${Number(returnedQty)}` : "0"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-xs align-middle">

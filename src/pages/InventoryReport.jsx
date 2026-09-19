@@ -148,18 +148,35 @@ export default function InventoryReport() {
       addStockDateMap[r.id] = r.created_at;
     });
 
-    const [invData, supData, purchaseItemsData, addStockItemsData] = await Promise.all([
+    const [invData, supData, purchaseItemsData, addStockItemsData, returnRecordsData, returnItemsData] = await Promise.all([
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, type, qty, foc_qty, unit_price, purchase_id").in("purchase_id", receivedPurchaseIds)
+        ? supabase.from("purchase_items").select("item_name, type, qty, original_qty, foc_qty, unit_price, purchase_id").in("purchase_id", receivedPurchaseIds)
         : Promise.resolve({ data: [] }),
       addStockIds.length > 0
         ? supabase.from("internal_consumption_items").select("inventory_id, qty, foc_qty, unit_price, consumption_id").in("consumption_id", addStockIds)
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+      supabase.from("purchase_returns").select("id, status"),
+      supabase.from("purchase_return_items").select("return_id, item_name, type, qty")
     ]);
 
-    if (!invData.error) setInventory(invData.data);
+    const activeReturnIds = new Set((returnRecordsData.data || [])
+      .filter(returnRecord => returnRecord.status !== "cancelled")
+      .map(returnRecord => returnRecord.id));
+    const returnedQtyByKey = (returnItemsData.data || []).reduce((totals, returnItem) => {
+      if (!activeReturnIds.has(returnItem.return_id)) return totals;
+      const key = buildItemKey(returnItem.item_name, returnItem.type);
+      totals[key] = (totals[key] || 0) + Number(returnItem.qty || 0);
+      return totals;
+    }, {});
+
+    if (!invData.error) {
+      setInventory((invData.data || []).map((item) => ({
+        ...item,
+        returned_qty: returnedQtyByKey[buildItemKey(item.item_name, item.type)] || 0
+      })));
+    }
     if (!supData.error) setSuppliers(supData.data || []);
 
     const [{ data: openingData }, { data: movementsData }] = await Promise.all([
@@ -1058,6 +1075,7 @@ export default function InventoryReport() {
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Sale Usage</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Internal Usage</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Adjustment</th>
+                  <th className="px-4 py-3 text-center font-semibold text-orange-700">Returned</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-700">Closing Qty</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Unit Price</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
@@ -1066,11 +1084,11 @@ export default function InventoryReport() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="11" className="text-center py-6">Loading...</td>
+                    <td colSpan="12" className="text-center py-6">Loading...</td>
                   </tr>
                 ) : currentData.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="text-center py-6">No Data Found</td>
+                    <td colSpan="12" className="text-center py-6">No Data Found</td>
                   </tr>
                 ) : (
                   currentData.map((item, index) => {
@@ -1092,6 +1110,7 @@ export default function InventoryReport() {
                         <td className={`px-4 py-3 text-center ${Number(movement.adjust_qty || 0) !== 0 ? "text-amber-600" : "text-slate-400"}`}>
                           {Number(movement.adjust_qty || 0) > 0 ? `+${Number(movement.adjust_qty)}` : Number(movement.adjust_qty || 0)}
                         </td>
+                        <td className="px-4 py-3 text-center text-orange-600">{Number(item.returned_qty || 0)}</td>
                         <td className={`px-4 py-3 text-center text-sm font-bold ${Number(item.qty || 0) === 0 ? "text-red-600" : "text-emerald-700"}`}>
                           {Number(item.qty || 0)}
                         </td>
