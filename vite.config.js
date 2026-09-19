@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     server: {
+      host: '0.0.0.0',
       proxy: {
         '/supabase': {
           target: env.VITE_SUPABASE_URL,

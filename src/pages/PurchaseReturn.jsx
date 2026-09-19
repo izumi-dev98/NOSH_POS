@@ -197,13 +197,6 @@ export default function PurchaseReturn({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
-    setProcessingReturnAction({ id: ret.id, action: "complete" });
-    Swal.fire({
-      title: "Completing return...",
-      text: "Updating inventory, please wait.",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
     try {
       // Generate return number
       const { data: existingReturns } = await supabase
